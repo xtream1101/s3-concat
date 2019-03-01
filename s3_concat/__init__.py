@@ -79,12 +79,23 @@ def _convert_to_bytes(value):
 
 class MultipartUploadJob:
 
-    def __init__(self, bucket, result_filepath, data_input, thread_count=1):
+    def __init__(self, bucket, result_filepath, data_input, thread_count=1,
+                 content_type='application/octet-stream'):
         # threading support comming soon
         self.bucket = bucket
         self.part_number, self.parts_list = data_input
-        self.result_filepath = '{}-{}'.format(result_filepath, self.part_number)
+        self.content_type = content_type
         self.thread_count = thread_count  # Not yet used
+
+        if '.' in result_filepath.split('/')[-1]:
+            # If there is a file extention, put the part number before it
+            path_parts = result_filepath.rsplit('.', 1)
+            self.result_filepath = '{}-{}.{}'.format(path_parts[0],
+                                                     self.part_number,
+                                                     path_parts[1])
+        else:
+            self.result_filepath = '{}-{}'.format(result_filepath,
+                                                  self.part_number)
 
         # s3 cannot be a class var because the Pool cannot pickle it
         s3 = _create_s3_client()
@@ -104,7 +115,8 @@ class MultipartUploadJob:
 
     def _start_multipart_upload(self, s3):
         resp = s3.create_multipart_upload(Bucket=self.bucket,
-                                          Key=self.result_filepath)
+                                          Key=self.result_filepath,
+                                          ContentType=self.content_type)
         logger.warning("Started multipart upload for {}, got response: {}"
                        .format(self.result_filepath, resp))
         return resp['UploadId']
@@ -189,10 +201,12 @@ class MultipartUploadJob:
 
 class S3Concat:
 
-    def __init__(self, bucket, key, min_file_size):
+    def __init__(self, bucket, key, min_file_size,
+                 content_type='application/octet-stream'):
         self.bucket = bucket
         self.key = key
         self.min_file_size = _convert_to_bytes(min_file_size)
+        self.content_type = content_type
         self.all_files = []
         self.s3 = _create_s3_client()
 
@@ -206,7 +220,8 @@ class S3Concat:
         func = partial(MultipartUploadJob,
                        self.bucket,
                        self.key,
-                       thread_count=1,)
+                       thread_count=1,
+                       content_type=self.content_type)
         pool.map(func, grouped_parts_list)
 
     def add_files(self, prefix):
