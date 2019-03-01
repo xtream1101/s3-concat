@@ -20,33 +20,33 @@ def _create_s3_client():
 
 
 def _chunk_by_size(file_list, min_file_size):
-        """Split list by size of file
+    """Split list by size of file
 
-        Arguments:
-            file_list {list} -- List of tuples as (<filename>, <file_size>)
-            min_file_size {int} -- Min part file size in bytes
+    Arguments:
+        file_list {list} -- List of tuples as (<filename>, <file_size>)
+        min_file_size {int} -- Min part file size in bytes
 
-        Returns:
-            list -- Each list of files is the min file size
-        """
-        grouped_list = []
-        current_list = []
-        current_size = 0
-        current_index = 1
-        for p in file_list:
-            current_size += p[1]
-            current_list.append(p)
-            if current_size > min_file_size:
-                grouped_list.append((current_index, current_list))
-                current_list = []
-                current_size = 0
-                current_index += 1
-
-        # Get anything left over
-        if current_size != 0:
+    Returns:
+        list -- Each list of files is the min file size
+    """
+    grouped_list = []
+    current_list = []
+    current_size = 0
+    current_index = 1
+    for p in file_list:
+        current_size += p[1]
+        current_list.append(p)
+        if current_size > min_file_size:
             grouped_list.append((current_index, current_list))
+            current_list = []
+            current_size = 0
+            current_index += 1
 
-        return grouped_list
+    # Get anything left over
+    if current_size != 0:
+        grouped_list.append((current_index, current_list))
+
+    return grouped_list
 
 
 def _convert_to_bytes(value):
@@ -95,16 +95,17 @@ class MultipartUploadJob:
 
         elif len(self.parts_list) == 1:
             # can perform a simple S3 copy since there is just a single file
+            source_file = "{}/{}".format(self.bucket, self.parts_list[0][0])
             resp = s3.copy_object(Bucket=self.bucket,
-                                  CopySource="{}/{}".format(self.bucket, self.parts_list[0][0]),
+                                  CopySource=source_file,
                                   Key=self.result_filepath)
-            logger.warning("Copied single file to {} and got response {}"
+            logger.warning("Copied single file to {} got response {}"
                            .format(self.result_filepath, resp))
 
     def _start_multipart_upload(self, s3):
         resp = s3.create_multipart_upload(Bucket=self.bucket,
                                           Key=self.result_filepath)
-        logger.warning("Started multipart upload for {}, and got response: {}"
+        logger.warning("Started multipart upload for {}, got response: {}"
                        .format(self.result_filepath, resp))
         return resp['UploadId']
 
@@ -113,33 +114,37 @@ class MultipartUploadJob:
         parts_mapping = []
         part_num = 0
 
-        s3_parts = ["{}/{}".format(self.bucket, p[0]) for p in self.parts_list if p[1] > MIN_S3_SIZE]
+        s3_parts = ["{}/{}".format(self.bucket, p[0])
+                    for p in self.parts_list if p[1] > MIN_S3_SIZE]
+
         local_parts = [p for p in self.parts_list if p[1] <= MIN_S3_SIZE]
 
         # assemble parts large enough for direct S3 copy
-        for part_num, source_part in enumerate(s3_parts, 1):  # part numbers are 1 indexed
+        for part_num, source_part in enumerate(s3_parts, 1):
             resp = s3.upload_part_copy(Bucket=self.bucket,
                                        Key=self.result_filepath,
                                        PartNumber=part_num,
                                        UploadId=self.upload_id,
                                        CopySource=source_part)
-            logger.warning("Setup S3 part #{}, with path: {}, and got response: {}"
+            logger.warning("Setup S3 part #{}, with path: {}, got response: {}"
                            .format(part_num, source_part, resp))
-            parts_mapping.append({'ETag': resp['CopyPartResult']['ETag'][1:-1], 'PartNumber': part_num})
+            parts_mapping.append({'ETag': resp['CopyPartResult']['ETag'][1:-1],
+                                  'PartNumber': part_num})
 
-        # assemble parts too small for direct S3 copy by downloading them locally,
+        # assemble parts too small for direct S3 copy by downloading them,
         # combining them, and then reuploading them as the last part of the
         # multi-part upload (which is not constrained to the 5mb limit)
 
-        # Concat the small_parts into the minium size then upload so not much is ever kept in memory
+        # Concat the small_parts into the minium size then upload
+        # this way not to much data is kept in memory
         for local_parts_part in _chunk_by_size(local_parts, MIN_S3_SIZE * 2):
             small_parts = []
             for source_part in local_parts_part[1]:
                 # Keep it all in memory
-                foo = s3.get_object(Bucket=self.bucket,
-                                    Key=source_part[0])['Body'].read().decode('utf-8')
-                small_parts.append(foo)
-                foo = None  # cleanup
+                tmp_file = s3.get_object(Bucket=self.bucket,
+                                         Key=source_part[0])
+                small_parts.append(tmp_file['Body'].read().decode('utf-8'))
+                tmp_file = None  # cleanup
 
             if len(small_parts) > 0:
                 part_num += 1
@@ -151,9 +156,10 @@ class MultipartUploadJob:
                                       PartNumber=part_num,
                                       UploadId=self.upload_id,
                                       Body=last_part)
-                logger.warning("Setup local part #{} from {} small files, and got response: {}"
+                logger.warning("Setup local part #{} from {}, got response: {}"
                                .format(part_num, small_part_count, resp))
-                parts_mapping.append({'ETag': resp['ETag'][1:-1], 'PartNumber': part_num})
+                parts_mapping.append({'ETag': resp['ETag'][1:-1],
+                                      'PartNumber': part_num})
 
             last_part = None  # cleanup
 
@@ -164,15 +170,21 @@ class MultipartUploadJob:
             s3.abort_multipart_upload(Bucket=self.bucket,
                                       Key=self.result_filepath,
                                       UploadId=self.upload_id)
-            logger.warning("Aborted concatenation for file {}, with upload id #{} due to empty parts mapping"
-                           .format(self.result_filepath, self.upload_id))
+            warn_msg = ("Aborted concatenation for file {}, with upload"
+                        " id #{} due to empty parts mapping")
+            logger.warning(warn_msg.format(self.result_filepath,
+                                           self.upload_id))
         else:
+            parts = {'Parts': parts_mapping}
             s3.complete_multipart_upload(Bucket=self.bucket,
                                          Key=self.result_filepath,
                                          UploadId=self.upload_id,
-                                         MultipartUpload={'Parts': parts_mapping})
-            logger.warning("Finished concatenation for file {}, with upload id #{}, and parts mapping: {}"
-                           .format(self.result_filepath, self.upload_id, parts_mapping))
+                                         MultipartUpload=parts)
+            warn_msg = ("Finished concatenation for file {},"
+                        " with upload id #{}, and parts mapping: {}")
+            logger.warning(warn_msg.format(self.result_filepath,
+                                           self.upload_id,
+                                           parts_mapping))
 
 
 class S3Concat:
@@ -187,7 +199,8 @@ class S3Concat:
     def concat(self, process_count=4):
 
         grouped_parts_list = _chunk_by_size(self.all_files, self.min_file_size)
-        logger.warning("Created {} concatenation groups".format(len(grouped_parts_list)))
+        logger.warning("Created {} concatenation groups"
+                       .format(len(grouped_parts_list)))
 
         pool = Pool(processes=process_count)
         func = partial(MultipartUploadJob,
@@ -217,10 +230,6 @@ class S3Concat:
 
 
 def cli():
-    """Command line tool to convert data file into other formats
-    Notes:
-        Not using pathlib because trying to keep this as compatible as posiable with other versions
-    """
     parser = argparse.ArgumentParser(description='Convert data files')
     parser.add_argument("--bucket",
                         help="base bucket to use",
@@ -249,4 +258,3 @@ def cli():
     job = S3Concat(args.bucket, args.output, args.filesize)
     job.add_files(args.folder)
     job.concat(args.processes)
-
