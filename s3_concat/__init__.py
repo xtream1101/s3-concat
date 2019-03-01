@@ -1,3 +1,4 @@
+import re
 import boto3
 import logging
 import argparse
@@ -6,7 +7,11 @@ from multiprocessing import Pool
 
 logger = logging.getLogger(__name__)
 # S3 multi-part upload parts must be larger than 5mb
-MIN_S3_SIZE = 5242880
+KB = 1024
+MB = KB**2
+GB = KB**3
+TB = KB**4
+MIN_S3_SIZE = 5 * MB
 
 
 def _create_s3_client():
@@ -44,6 +49,34 @@ def _chunk_by_size(file_list, min_file_size):
         return grouped_list
 
 
+def _convert_to_bytes(value):
+    """Convert the input value to bytes
+
+    Arguments:
+        value {string} -- Value and size of the input with no spaces
+
+    Returns:
+        float -- The value converted to bytes as a float
+
+    Raises:
+        ValueError -- if the input value is not a valid type to convert
+    """
+    value = value.strip()
+    sizes = {'KB': 1024,
+             'MB': 1024**2,
+             'GB': 1024**3,
+             'TB': 1024**4,
+             }
+    if value[-2:].upper() in sizes:
+        return float(value[:-2].strip()) * sizes[value[-2:].upper()]
+    elif re.match(r'^\d+(\.\d+)?$', value):
+        return float(value)
+    elif re.match(r'^\d+(\.\d+)?\s?B$', value):
+        return float(value[:-1])
+    else:
+        raise ValueError("Value {} is not a valid size".format(value))
+
+
 class MultipartUploadJob:
 
     def __init__(self, bucket, result_filepath, data_input, thread_count=1):
@@ -53,10 +86,7 @@ class MultipartUploadJob:
         self.result_filepath = '{}-{}'.format(result_filepath, self.part_number)
         self.thread_count = thread_count  # Not yet used
 
-        self.foo()
-
-    def foo(self):
-        # s3 cannot be part of the class because the Pool cannot pickle it
+        # s3 cannot be a class var because the Pool cannot pickle it
         s3 = _create_s3_client()
         if len(self.parts_list) > 0:
             self.upload_id = self._start_multipart_upload(s3)
@@ -66,13 +96,14 @@ class MultipartUploadJob:
         elif len(self.parts_list) == 1:
             # can perform a simple S3 copy since there is just a single file
             resp = s3.copy_object(Bucket=self.bucket,
-                                       CopySource="{}/{}".format(self.bucket, self.parts_list[0][0]),
-                                       Key=self.result_filepath)
-            logger.warning("Copied single file to {} and got response {}".format(self.result_filepath, resp))
+                                  CopySource="{}/{}".format(self.bucket, self.parts_list[0][0]),
+                                  Key=self.result_filepath)
+            logger.warning("Copied single file to {} and got response {}"
+                           .format(self.result_filepath, resp))
 
     def _start_multipart_upload(self, s3):
         resp = s3.create_multipart_upload(Bucket=self.bucket,
-                                               Key=self.result_filepath)
+                                          Key=self.result_filepath)
         logger.warning("Started multipart upload for {}, and got response: {}"
                        .format(self.result_filepath, resp))
         return resp['UploadId']
@@ -86,7 +117,7 @@ class MultipartUploadJob:
         local_parts = [p for p in self.parts_list if p[1] <= MIN_S3_SIZE]
 
         # assemble parts large enough for direct S3 copy
-        for part_num, source_part in enumerate(s3_parts, 1): # part numbers are 1 indexed
+        for part_num, source_part in enumerate(s3_parts, 1):  # part numbers are 1 indexed
             resp = s3.upload_part_copy(Bucket=self.bucket,
                                        Key=self.result_filepath,
                                        PartNumber=part_num,
@@ -106,7 +137,7 @@ class MultipartUploadJob:
             for source_part in local_parts_part[1]:
                 # Keep it all in memory
                 foo = s3.get_object(Bucket=self.bucket,
-                                         Key=source_part[0])['Body'].read().decode('utf-8')
+                                    Key=source_part[0])['Body'].read().decode('utf-8')
                 small_parts.append(foo)
                 foo = None  # cleanup
 
@@ -116,10 +147,10 @@ class MultipartUploadJob:
                 small_part_count = len(small_parts)
                 small_parts = None  # cleanup
                 resp = s3.upload_part(Bucket=self.bucket,
-                                           Key=self.result_filepath,
-                                           PartNumber=part_num,
-                                           UploadId=self.upload_id,
-                                           Body=last_part)
+                                      Key=self.result_filepath,
+                                      PartNumber=part_num,
+                                      UploadId=self.upload_id,
+                                      Body=last_part)
                 logger.warning("Setup local part #{} from {} small files, and got response: {}"
                                .format(part_num, small_part_count, resp))
                 parts_mapping.append({'ETag': resp['ETag'][1:-1], 'PartNumber': part_num})
@@ -130,19 +161,18 @@ class MultipartUploadJob:
 
     def _complete_concatenation(self, s3, parts_mapping):
         if len(parts_mapping) == 0:
-            resp = s3.abort_multipart_upload(Bucket=self.bucket,
-                                                  Key=self.result_filepath,
-                                                  UploadId=self.upload_id)
+            s3.abort_multipart_upload(Bucket=self.bucket,
+                                      Key=self.result_filepath,
+                                      UploadId=self.upload_id)
             logger.warning("Aborted concatenation for file {}, with upload id #{} due to empty parts mapping"
                            .format(self.result_filepath, self.upload_id))
         else:
-            resp = s3.complete_multipart_upload(Bucket=self.bucket,
-                                                     Key=self.result_filepath,
-                                                     UploadId=self.upload_id,
-                                                     MultipartUpload={'Parts': parts_mapping})
+            s3.complete_multipart_upload(Bucket=self.bucket,
+                                         Key=self.result_filepath,
+                                         UploadId=self.upload_id,
+                                         MultipartUpload={'Parts': parts_mapping})
             logger.warning("Finished concatenation for file {}, with upload id #{}, and parts mapping: {}"
                            .format(self.result_filepath, self.upload_id, parts_mapping))
-
 
 
 class S3Concat:
@@ -150,7 +180,7 @@ class S3Concat:
     def __init__(self, bucket, key, min_file_size):
         self.bucket = bucket
         self.key = key
-        self.min_file_size = min_file_size
+        self.min_file_size = _convert_to_bytes(min_file_size)
         self.all_files = []
         self.s3 = _create_s3_client()
 
@@ -160,9 +190,10 @@ class S3Concat:
         logger.warning("Created {} concatenation groups".format(len(grouped_parts_list)))
 
         pool = Pool(processes=process_count)
-        func = partial(MultipartUploadJob, self.bucket,
-                                           self.key,
-                                           thread_count=1,)
+        func = partial(MultipartUploadJob,
+                       self.bucket,
+                       self.key,
+                       thread_count=1,)
         pool.map(func, grouped_parts_list)
 
     def add_files(self, prefix):
@@ -191,17 +222,31 @@ def cli():
         Not using pathlib because trying to keep this as compatible as posiable with other versions
     """
     parser = argparse.ArgumentParser(description='Convert data files')
-    parser.add_argument("--bucket", help="base bucket to use")
-    parser.add_argument("--folder", help="folder whose contents should be combined")
-    parser.add_argument("--output", help="output location for resulting merged files, relative to the specified base bucket")
-    parser.add_argument("--suffix", help="suffix of files to include in the combination")
-    parser.add_argument("--filesize", type=int, help="max filesize of the concatenated files in bytes")
-    parser.add_argument("--processes", type=int, help="Number of parallel processes to run. (Default: 4)", default=4)
+    parser.add_argument("--bucket",
+                        help="base bucket to use",
+                        required=True,
+                        )
+    parser.add_argument("--folder",
+                        help="folder whose contents should be combined",
+                        required=True,
+                        )
+    parser.add_argument("--output",
+                        help=("output location for resulting merged files,"
+                              " relative to the specified base bucket"),
+                        required=True,
+                        )
+    parser.add_argument("--filesize",
+                        help=("Min filesize of the concatenated files"
+                              " in [B,KB,MB,GB,TB]. e.x. 5.2GB"),
+                        required=True,
+                        )
+    parser.add_argument("--processes",
+                        type=int,
+                        help="Number of processes to run. (Default: 4)",
+                        default=4)
     args = parser.parse_args()
 
-    try:
-        mc = S3Concat(args.bucket, args.output, args.filesize)
-        mc.add_files(args.folder)
-        mc.concat(args.processes)
-    except Exception:
-        logger.exception("Something went wrong")
+    job = S3Concat(args.bucket, args.output, args.filesize)
+    job.add_files(args.folder)
+    job.concat(args.processes)
+
