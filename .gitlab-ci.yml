@@ -1,0 +1,22 @@
+image: python:3.5
+
+stages:
+  - test
+  - release
+  - deploy_service
+
+flake8:
+  stage: test
+  script:
+    - pip install tox
+    - tox -e flake8
+
+release-package:
+  stage: release
+  only:
+    - master
+  script:
+    - pip install twine
+    - rm -f dist/*
+    - python setup.py sdist
+    - twine upload -u ${PYPI_USER} -p ${PYPI_PASS} dist/*

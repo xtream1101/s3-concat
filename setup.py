@@ -10,7 +10,7 @@ except (IOError, ImportError) as e:
 setup(
     name='s3-concat',
     packages=['s3_concat'],
-    version='0.0.2',
+    version='0.0.3',
     description='Concat files in s3',
     long_description=long_description,
     author='Eddy Hintze',

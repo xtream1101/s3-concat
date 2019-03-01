@@ -4,15 +4,28 @@ S3 Concat is used to concatenate many small files in an s3 bucket into fewer lar
 
 
 ## Install
-_Comming soon:_ ~`pip install s3-concat`~
+`pip install s3-concat`
 
 
 ## Usage
-This installs a cli called `s3-concat`. Find out how to use it by running `s3-concat -h`.  
-It can also be imported and used in any other python scripts by foing `import s3_concat`.  
-More docs to follow on that.
 
+### Command Line
+`$ s3-concat -h`
+
+### Import
+```python
+bucket = 'YOUR_BUCKET_NAME'
+out_path = 'FILE_TO_SAVE_TO'
+min_file_size = '50MB'
+path_to_concat = 'PATH_TO_FILES_TO_CONCAT'
+
+# Init the job
+job = S3Concat(bucket, out_path, min_file_size, content_type='application/json')
+# Add files, can call multiple times to add files from other directories
+job.add_files(path_to_concat)
+# Run the job using 6 processes. This is BLOCKING and is using a multiprocessing pool
+job.concat(6)
+```
 
 ## Limitations
-This uses the multipart upload of s3 and its limits are https://docs.aws.amazon.com/AmazonS3/latest/dev/qfacts.html  
-TODO: give details on how it deals with files smaller then 5MB because it is handled differently.
+This uses the multipart upload of s3 and its limits are https://docs.aws.amazon.com/AmazonS3/latest/dev/qfacts.html
