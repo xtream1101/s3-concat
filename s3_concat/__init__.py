@@ -1,4 +1,3 @@
-import os
 import boto3
 import logging
 import argparse
@@ -6,154 +5,187 @@ from functools import partial
 from multiprocessing import Pool
 
 logger = logging.getLogger(__name__)
-BUCKET = ''
 # S3 multi-part upload parts must be larger than 5mb
 MIN_S3_SIZE = 5242880
 
 
-def run_concatenation(folder_to_concatenate, result_filepath, file_suffix, max_filesize, processes):
-    s3 = new_s3_client()
-    parts_list = collect_parts(s3, folder_to_concatenate, file_suffix)
-    logger.warning("Found {} parts to concatenate in {}/{}".format(len(parts_list), BUCKET, folder_to_concatenate))
-
-    # limits https://docs.aws.amazon.com/AmazonS3/latest/dev/qfacts.html
-    grouped_parts_list = chunk_by_size(parts_list, max_filesize)
-    logger.warning("Created {} concatenation groups".format(len(grouped_parts_list)))
-    pool = Pool(processes=processes)
-    func = partial(run_single_concatenation, result_filepath, max_filesize)
-    pool.map(func, grouped_parts_list)
-
-
-def run_single_concatenation(result_filepath, max_filesize, data_input):
-    s3 = new_s3_client()
-    idx, parts_list = data_input
-    result_filepath = '{}-{}'.format(result_filepath, idx)
-
-    if len(parts_list) > 1:
-        # perform multi-part upload
-        upload_id = initiate_concatenation(s3, result_filepath)
-        parts_mapping = assemble_parts_to_concatenate(s3, result_filepath, upload_id, parts_list, max_filesize)
-        complete_concatenation(s3, result_filepath, upload_id, parts_mapping)
-    elif len(parts_list) == 1:
-        # can perform a simple S3 copy since there is just a single file
-        resp = s3.copy_object(Bucket=BUCKET, CopySource="{}/{}".format(BUCKET, parts_list[0][0]), Key=result_filepath)
-        logger.warning("Copied single file to {} and got response {}".format(result_filepath, resp))
-    else:
-        logger.warning("No files to concatenate for {}".format(result_filepath))
-        pass
-
-
-def initiate_concatenation(s3, result_filename):
-    # performing the concatenation in S3 requires creating a multi-part upload
-    # and then referencing the S3 files we wish to concatenate as "parts" of that upload
-    resp = s3.create_multipart_upload(Bucket=BUCKET, Key=result_filename)
-    logger.warning("Initiated concatenation attempt for {}, and got response: {}".format(result_filename, resp))
-    return resp['UploadId']
-
-def assemble_parts_to_concatenate(s3, result_filename, upload_id, parts_list, max_filesize):
-    parts_mapping = []
-    part_num = 0
-
-    s3_parts = ["{}/{}".format(BUCKET, p[0]) for p in parts_list if p[1] > MIN_S3_SIZE]
-    local_parts = [p for p in parts_list if p[1] <= MIN_S3_SIZE]
-
-    # assemble parts large enough for direct S3 copy
-    for part_num, source_part in enumerate(s3_parts, 1): # part numbers are 1 indexed
-        resp = s3.upload_part_copy(Bucket=BUCKET,
-                                   Key=result_filename,
-                                   PartNumber=part_num,
-                                   UploadId=upload_id,
-                                   CopySource=source_part)
-        logger.warning("Setup S3 part #{}, with path: {}, and got response: {}".format(part_num, source_part, resp))
-        parts_mapping.append({'ETag': resp['CopyPartResult']['ETag'][1:-1], 'PartNumber': part_num})
-
-    # assemble parts too small for direct S3 copy by downloading them locally,
-    # combining them, and then reuploading them as the last part of the
-    # multi-part upload (which is not constrained to the 5mb limit)
-
-    # Concat the small_parts into the minium size then upload so not much is ever kept in memory
-    for local_parts_part in chunk_by_size(local_parts, min(MIN_S3_SIZE * 2, max_filesize)):
-        small_parts = []
-        for source_part in local_parts_part[1]:
-            # Keep it all in memory
-            foo = s3.get_object(Bucket=BUCKET, Key=source_part[0])['Body'].read().decode('utf-8')
-            small_parts.append(foo)
-            foo = None  # cleanup
-
-        if len(small_parts) > 0:
-            part_num += 1
-            last_part = ''.join(small_parts)
-            small_part_count = len(small_parts)
-            small_parts = None  # cleanup
-            resp = s3.upload_part(Bucket=BUCKET, Key=result_filename, PartNumber=part_num, UploadId=upload_id, Body=last_part)
-            logger.warning("Setup local part #{} from {} small files, and got response: {}".format(part_num, small_part_count, resp))
-            parts_mapping.append({'ETag': resp['ETag'][1:-1], 'PartNumber': part_num})
-
-        last_part = None  # cleanup
-
-    return parts_mapping
-
-def complete_concatenation(s3, result_filename, upload_id, parts_mapping):
-    if len(parts_mapping) == 0:
-        resp = s3.abort_multipart_upload(Bucket=BUCKET, Key=result_filename, UploadId=upload_id)
-        logger.warning("Aborted concatenation for file {}, with upload id #{} due to empty parts mapping".format(result_filename, upload_id))
-    else:
-        resp = s3.complete_multipart_upload(Bucket=BUCKET, Key=result_filename, UploadId=upload_id, MultipartUpload={'Parts': parts_mapping})
-        logger.warning("Finished concatenation for file {}, with upload id #{}, and parts mapping: {}".format(result_filename, upload_id, parts_mapping))
-
-
-def chunk_by_size(parts_list, max_filesize):
-    grouped_list = []
-    current_list = []
-    current_size = 0
-    current_index = 1
-    for p in parts_list:
-        current_size += p[1]
-        current_list.append(p)
-        if current_size > max_filesize:
-            grouped_list.append((current_index, current_list))
-            current_list = []
-            current_size = 0
-            current_index += 1
-
-    # Get anything left over
-    if current_size != 0:
-        grouped_list.append((current_index, current_list))
-
-    return grouped_list
-
-def new_s3_client():
-    # initialize an S3 client with a private session so that multithreading
-    # doesn't cause issues with the client's internal state
+def _create_s3_client():
     session = boto3.session.Session()
     return session.client('s3')
 
-def collect_parts(s3, folder, suffix):
-    if suffix is None:
-        suffix = ''
-    return list(filter(lambda x: x[0].endswith(suffix), _list_all_objects_with_size(s3, folder)))
 
-def _list_all_objects_with_size(s3, folder):
+def _chunk_by_size(file_list, min_file_size):
+        """Split list by size of file
 
-    def resp_to_filelist(resp):
-        return [(x['Key'], x['Size']) for x in resp['Contents']]
+        Arguments:
+            file_list {list} -- List of tuples as (<filename>, <file_size>)
+            min_file_size {int} -- Min part file size in bytes
 
-    objects_list = []
-    resp = s3.list_objects(Bucket=BUCKET, Prefix=folder)
-    objects_list.extend(resp_to_filelist(resp))
-    while resp['IsTruncated']:
-        # if there are more entries than can be returned in one request, the key
-        # of the last entry returned acts as a pagination value for the next request
-        logger.warning("Found {} objects so far".format(len(objects_list)))
-        last_key = objects_list[-1][0]
-        resp = s3.list_objects(Bucket=BUCKET, Prefix=folder, Marker=last_key)
+        Returns:
+            list -- Each list of files is the min file size
+        """
+        grouped_list = []
+        current_list = []
+        current_size = 0
+        current_index = 1
+        for p in file_list:
+            current_size += p[1]
+            current_list.append(p)
+            if current_size > min_file_size:
+                grouped_list.append((current_index, current_list))
+                current_list = []
+                current_size = 0
+                current_index += 1
+
+        # Get anything left over
+        if current_size != 0:
+            grouped_list.append((current_index, current_list))
+
+        return grouped_list
+
+
+class MultipartUploadJob:
+
+    def __init__(self, bucket, result_filepath, data_input, thread_count=1):
+        # threading support comming soon
+        self.bucket = bucket
+        self.part_number, self.parts_list = data_input
+        self.result_filepath = '{}-{}'.format(result_filepath, self.part_number)
+        self.thread_count = thread_count  # Not yet used
+
+        self.foo()
+
+    def foo(self):
+        # s3 cannot be part of the class because the Pool cannot pickle it
+        s3 = _create_s3_client()
+        if len(self.parts_list) > 0:
+            self.upload_id = self._start_multipart_upload(s3)
+            parts_mapping = self._assemble_parts(s3)
+            self._complete_concatenation(s3, parts_mapping)
+
+        elif len(self.parts_list) == 1:
+            # can perform a simple S3 copy since there is just a single file
+            resp = s3.copy_object(Bucket=self.bucket,
+                                       CopySource="{}/{}".format(self.bucket, self.parts_list[0][0]),
+                                       Key=self.result_filepath)
+            logger.warning("Copied single file to {} and got response {}".format(self.result_filepath, resp))
+
+    def _start_multipart_upload(self, s3):
+        resp = s3.create_multipart_upload(Bucket=self.bucket,
+                                               Key=self.result_filepath)
+        logger.warning("Started multipart upload for {}, and got response: {}"
+                       .format(self.result_filepath, resp))
+        return resp['UploadId']
+
+    def _assemble_parts(self, s3):
+        # TODO: Thread the loops in this function
+        parts_mapping = []
+        part_num = 0
+
+        s3_parts = ["{}/{}".format(self.bucket, p[0]) for p in self.parts_list if p[1] > MIN_S3_SIZE]
+        local_parts = [p for p in self.parts_list if p[1] <= MIN_S3_SIZE]
+
+        # assemble parts large enough for direct S3 copy
+        for part_num, source_part in enumerate(s3_parts, 1): # part numbers are 1 indexed
+            resp = s3.upload_part_copy(Bucket=self.bucket,
+                                       Key=self.result_filepath,
+                                       PartNumber=part_num,
+                                       UploadId=self.upload_id,
+                                       CopySource=source_part)
+            logger.warning("Setup S3 part #{}, with path: {}, and got response: {}"
+                           .format(part_num, source_part, resp))
+            parts_mapping.append({'ETag': resp['CopyPartResult']['ETag'][1:-1], 'PartNumber': part_num})
+
+        # assemble parts too small for direct S3 copy by downloading them locally,
+        # combining them, and then reuploading them as the last part of the
+        # multi-part upload (which is not constrained to the 5mb limit)
+
+        # Concat the small_parts into the minium size then upload so not much is ever kept in memory
+        for local_parts_part in _chunk_by_size(local_parts, MIN_S3_SIZE * 2):
+            small_parts = []
+            for source_part in local_parts_part[1]:
+                # Keep it all in memory
+                foo = s3.get_object(Bucket=self.bucket,
+                                         Key=source_part[0])['Body'].read().decode('utf-8')
+                small_parts.append(foo)
+                foo = None  # cleanup
+
+            if len(small_parts) > 0:
+                part_num += 1
+                last_part = ''.join(small_parts)
+                small_part_count = len(small_parts)
+                small_parts = None  # cleanup
+                resp = s3.upload_part(Bucket=self.bucket,
+                                           Key=self.result_filepath,
+                                           PartNumber=part_num,
+                                           UploadId=self.upload_id,
+                                           Body=last_part)
+                logger.warning("Setup local part #{} from {} small files, and got response: {}"
+                               .format(part_num, small_part_count, resp))
+                parts_mapping.append({'ETag': resp['ETag'][1:-1], 'PartNumber': part_num})
+
+            last_part = None  # cleanup
+
+        return parts_mapping
+
+    def _complete_concatenation(self, s3, parts_mapping):
+        if len(parts_mapping) == 0:
+            resp = s3.abort_multipart_upload(Bucket=self.bucket,
+                                                  Key=self.result_filepath,
+                                                  UploadId=self.upload_id)
+            logger.warning("Aborted concatenation for file {}, with upload id #{} due to empty parts mapping"
+                           .format(self.result_filepath, self.upload_id))
+        else:
+            resp = s3.complete_multipart_upload(Bucket=self.bucket,
+                                                     Key=self.result_filepath,
+                                                     UploadId=self.upload_id,
+                                                     MultipartUpload={'Parts': parts_mapping})
+            logger.warning("Finished concatenation for file {}, with upload id #{}, and parts mapping: {}"
+                           .format(self.result_filepath, self.upload_id, parts_mapping))
+
+
+
+class S3Concat:
+
+    def __init__(self, bucket, key, min_file_size):
+        self.bucket = bucket
+        self.key = key
+        self.min_file_size = min_file_size
+        self.all_files = []
+        self.s3 = _create_s3_client()
+
+    def concat(self, process_count=4):
+
+        grouped_parts_list = _chunk_by_size(self.all_files, self.min_file_size)
+        logger.warning("Created {} concatenation groups".format(len(grouped_parts_list)))
+
+        pool = Pool(processes=process_count)
+        func = partial(MultipartUploadJob, self.bucket,
+                                           self.key,
+                                           thread_count=1,)
+        pool.map(func, grouped_parts_list)
+
+    def add_files(self, prefix):
+
+        def resp_to_filelist(resp):
+            return [(x['Key'], x['Size']) for x in resp['Contents']]
+
+        objects_list = []
+        resp = self.s3.list_objects(Bucket=self.bucket, Prefix=prefix)
         objects_list.extend(resp_to_filelist(resp))
+        logger.warning("Found {} objects so far".format(len(objects_list)))
+        while resp['IsTruncated']:
+            last_key = objects_list[-1][0]
+            resp = self.s3.list_objects(Bucket=self.bucket,
+                                        Prefix=self.key,
+                                        Marker=last_key)
+            objects_list.extend(resp_to_filelist(resp))
+            logger.warning("Found {} objects so far".format(len(objects_list)))
 
-    return objects_list
+        self.all_files.extend(objects_list)
 
 
 def cli():
-    global BUCKET
     """Command line tool to convert data file into other formats
     Notes:
         Not using pathlib because trying to keep this as compatible as posiable with other versions
@@ -168,7 +200,8 @@ def cli():
     args = parser.parse_args()
 
     try:
-        BUCKET = args.bucket
-        run_concatenation(args.folder, args.output, args.suffix, args.filesize, args.processes)
+        mc = S3Concat(args.bucket, args.output, args.filesize)
+        mc.add_files(args.folder)
+        mc.concat(args.processes)
     except Exception:
         logger.exception("Something went wrong")
