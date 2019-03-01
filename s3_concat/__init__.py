@@ -221,7 +221,7 @@ class S3Concat:
         while resp['IsTruncated']:
             last_key = objects_list[-1][0]
             resp = self.s3.list_objects(Bucket=self.bucket,
-                                        Prefix=self.key,
+                                        Prefix=prefix,
                                         Marker=last_key)
             objects_list.extend(resp_to_filelist(resp))
             logger.warning("Found {} objects so far".format(len(objects_list)))
