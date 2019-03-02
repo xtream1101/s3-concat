@@ -1,7 +1,9 @@
 import re
 import boto3
+import queue
 import logging
 import argparse
+import threading
 from functools import partial
 from multiprocessing import Pool
 
@@ -12,6 +14,31 @@ MB = KB**2
 GB = KB**3
 TB = KB**4
 MIN_S3_SIZE = 5 * MB
+
+
+def _threads(num_threads, data, callback, *args, **kwargs):
+    q = queue.Queue()
+    item_list = []
+
+    def _thread_run():
+        while True:
+            item = q.get()
+            item_list.append(callback(item, *args, **kwargs))
+            q.task_done()
+
+    for i in range(num_threads):
+        t = threading.Thread(target=_thread_run)
+        t.daemon = True
+        t.start()
+
+    # Fill the Queue with the data to process
+    for item in data:
+        q.put(item)
+
+    # Start processing the data
+    q.join()
+
+    return item_list
 
 
 def _create_s3_client():
@@ -79,13 +106,14 @@ def _convert_to_bytes(value):
 
 class MultipartUploadJob:
 
-    def __init__(self, bucket, result_filepath, data_input, thread_count=1,
+    def __init__(self, bucket, result_filepath, data_input,
+                 small_parts_threads=1,
                  content_type='application/octet-stream'):
         # threading support comming soon
         self.bucket = bucket
         self.part_number, self.parts_list = data_input
         self.content_type = content_type
-        self.thread_count = thread_count  # Not yet used
+        self.small_parts_threads = small_parts_threads
 
         if '.' in result_filepath.split('/')[-1]:
             # If there is a file extention, put the part number before it
@@ -150,13 +178,12 @@ class MultipartUploadJob:
         # Concat the small_parts into the minium size then upload
         # this way not to much data is kept in memory
         for local_parts_part in _chunk_by_size(local_parts, MIN_S3_SIZE * 2):
-            small_parts = []
-            for source_part in local_parts_part[1]:
-                # Keep it all in memory
-                tmp_file = s3.get_object(Bucket=self.bucket,
-                                         Key=source_part[0])
-                small_parts.append(tmp_file['Body'].read().decode('utf-8'))
-                tmp_file = None  # cleanup
+            get_small_parts = lambda part: s3.get_object(Bucket=self.bucket,
+                                                         Key=part[0])\
+                                              ['Body'].read().decode('utf-8')
+            small_parts = _threads(self.small_parts_threads,
+                                   local_parts_part[1],
+                                   get_small_parts)
 
             if len(small_parts) > 0:
                 part_num += 1
@@ -210,17 +237,17 @@ class S3Concat:
         self.all_files = []
         self.s3 = _create_s3_client()
 
-    def concat(self, process_count=4):
+    def concat(self, parts_threads=1, small_parts_threads=1):
 
         grouped_parts_list = _chunk_by_size(self.all_files, self.min_file_size)
         logger.warning("Created {} concatenation groups"
                        .format(len(grouped_parts_list)))
 
-        pool = Pool(processes=process_count)
+        pool = Pool(processes=parts_threads)
         func = partial(MultipartUploadJob,
                        self.bucket,
                        self.key,
-                       thread_count=1,
+                       small_parts_threads=small_parts_threads,
                        content_type=self.content_type)
         pool.map(func, grouped_parts_list)
 
@@ -264,12 +291,18 @@ def cli():
                               " in [B,KB,MB,GB,TB]. e.x. 5.2GB"),
                         required=True,
                         )
-    parser.add_argument("--processes",
+    parser.add_argument("--parts-threads",
                         type=int,
-                        help="Number of processes to run. (Default: 4)",
-                        default=4)
+                        help="Number of processes to run. (Default: 1)",
+                        default=1)
+    parser.add_argument("--small-parts-threads",
+                        type=int,
+                        help=("[Advanced Usage] Number of threads to"
+                              " download small parts with. (Default: 1)"),
+                        default=1)
     args = parser.parse_args()
 
     job = S3Concat(args.bucket, args.output, args.filesize)
     job.add_files(args.folder)
-    job.concat(args.processes)
+    job.concat(parts_threads=args.parts_threads,
+               small_parts_threads=args.small_parts_threads)
