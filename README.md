@@ -1,5 +1,9 @@
 # Python S3 Concat
 
+[![PyPI](https://img.shields.io/pypi/v/s3-concat.svg)](https://pypi.python.org/pypi/s3-concat)
+[![PyPI](https://img.shields.io/pypi/l/s3-concat.svg)](https://pypi.python.org/pypi/s3-concat)  
+
+
 S3 Concat is used to concatenate many small files in an s3 bucket into fewer larger files.
 
 
