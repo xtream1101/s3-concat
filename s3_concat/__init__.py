@@ -1,5 +1,4 @@
 import logging
-import threading
 from functools import partial
 from multiprocessing import Pool
 

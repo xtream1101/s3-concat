@@ -77,10 +77,11 @@ class MultipartUploadJob:
 
         # Concat the small_parts into the minium size then upload
         # this way not to much data is kept in memory
+        def get_small_parts(part):
+            return s3.get_object(Bucket=self.bucket,
+                                 Key=part[0])['Body'].read().decode('utf-8')
+
         for local_parts_part in _chunk_by_size(local_parts, MIN_S3_SIZE * 2):
-            get_small_parts = lambda part: s3.get_object(Bucket=self.bucket,
-                                                         Key=part[0])\
-                                              ['Body'].read().decode('utf-8')
             small_parts = _threads(self.small_parts_threads,
                                    local_parts_part[1],
                                    get_small_parts)
