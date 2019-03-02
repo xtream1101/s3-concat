@@ -36,8 +36,8 @@ job.concat(parts_threads=4, small_parts_threads=1)
 
 Depending on your use case, you may want to use `parts_threads` and/or `small_parts_threads`.  
 
-    - `parts_threads` will thread the creation of the part files you see in s3.
-    - `small_parts_threads` is only used when the files you are trying to concat are less then 5MB. Due to the limitations of the s3 multipart_upload api (see *Limitations* below) any files less then 5MB need to be download locally, concated together, then re uploaded. By setting this thread count it will download the parts in parallel for faster creation of the concatination process.
+  - `parts_threads` will thread the creation of the part files you see in s3.
+  - `small_parts_threads` is only used when the files you are trying to concat are less then 5MB. Due to the limitations of the s3 multipart_upload api (see *Limitations* below) any files less then 5MB need to be download locally, concated together, then re uploaded. By setting this thread count it will download the parts in parallel for faster creation of the concatination process.
 
 Be aware that if using the `small_parts_threads` that these threads run inside of the parts threads. So the amount of total threads running on your system will be `parts_threads * small_parts_threads`.  
 
