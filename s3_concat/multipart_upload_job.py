@@ -38,15 +38,21 @@ class MultipartUploadJob:
             resp = s3.copy_object(Bucket=self.bucket,
                                   CopySource=source_file,
                                   Key=self.result_filepath)
-            logger.info("Copied single file to {} got response {}"
-                        .format(self.result_filepath, resp))
+            msg = "Copied single file to {}".format(self.result_filepath)
+            if logger.getEffectiveLevel() == logging.DEBUG:
+                logger.debug("{}, got response: {}".format(msg, resp))
+            else:
+                logger.info(msg)
 
     def _start_multipart_upload(self, s3):
         resp = s3.create_multipart_upload(Bucket=self.bucket,
                                           Key=self.result_filepath,
                                           ContentType=self.content_type)
-        logger.info("Started multipart upload for {}, got response: {}"
-                    .format(self.result_filepath, resp))
+        msg = "Started multipart upload for {}".format(self.result_filepath)
+        if logger.getEffectiveLevel() == logging.DEBUG:
+            logger.debug("{}, got response: {}".format(msg, resp))
+        else:
+            logger.info(msg)
         return resp['UploadId']
 
     def _assemble_parts(self, s3):
@@ -66,8 +72,13 @@ class MultipartUploadJob:
                                        PartNumber=part_num,
                                        UploadId=self.upload_id,
                                        CopySource=source_part)
-            logger.info("Setup S3 part #{}, with path: {}, got response: {}"
-                        .format(part_num, source_part, resp))
+            msg = "Setup S3 part #{}, with path: {}".format(part_num,
+                                                            source_part)
+            if logger.getEffectiveLevel() == logging.DEBUG:
+                logger.debug("{}, got response: {}".format(msg, resp))
+            else:
+                logger.info(msg)
+
             parts_mapping.append({'ETag': resp['CopyPartResult']['ETag'][1:-1],
                                   'PartNumber': part_num})
 
@@ -96,8 +107,12 @@ class MultipartUploadJob:
                                       PartNumber=part_num,
                                       UploadId=self.upload_id,
                                       Body=last_part)
-                logger.info("Setup local part #{} from {}, got response: {}"
-                            .format(part_num, small_part_count, resp))
+                msg = "Setup local sub-part #{} from {} files"\
+                      .format(part_num, small_part_count)
+                if logger.getEffectiveLevel() == logging.DEBUG:
+                    logger.debug("{}, got response: {}".format(msg, resp))
+                else:
+                    logger.info(msg)
                 parts_mapping.append({'ETag': resp['ETag'][1:-1],
                                       'PartNumber': part_num})
 
@@ -121,7 +136,6 @@ class MultipartUploadJob:
                                          UploadId=self.upload_id,
                                          MultipartUpload=parts)
             warn_msg = ("Finished concatenation for file {},"
-                        " with upload id #{}, and parts mapping: {}")
+                        " with upload id #{}")
             logger.info(warn_msg.format(self.result_filepath,
-                                        self.upload_id,
-                                        parts_mapping))
+                                        self.upload_id))

@@ -1,7 +1,11 @@
 import re
 import boto3
 import queue
+import logging
 import threading
+
+
+logger = logging.getLogger(__name__)
 
 # S3 multi-part upload parts must be larger than 5mb
 KB = 1024
@@ -18,7 +22,16 @@ def _threads(num_threads, data, callback, *args, **kwargs):
     def _thread_run():
         while True:
             item = q.get()
-            item_list.append(callback(item, *args, **kwargs))
+            for _ in range(3):
+                # re try 3 times before giving up
+                try:
+                    response = callback(item, *args, **kwargs)
+                except Exception:
+                    logger.exception("Retry failed batch of: {}".format(item))
+                else:
+                    item_list.append(response)
+                    break
+
             q.task_done()
 
     for i in range(num_threads):
