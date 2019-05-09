@@ -88,37 +88,57 @@ class MultipartUploadJob:
 
         # Concat the small_parts into the minium size then upload
         # this way not to much data is kept in memory
-        def get_small_parts(part):
-            return s3.get_object(Bucket=self.bucket,
-                                 Key=part[0])['Body'].read().decode('utf-8')
+        def get_small_parts(data):
+            part_num, part = data
+            small_part_count = len(part[1])
 
-        for local_parts_part in _chunk_by_size(local_parts, MIN_S3_SIZE * 2):
-            small_parts = _threads(self.small_parts_threads,
-                                   local_parts_part[1],
-                                   get_small_parts)
+            logger.info("Start sub-part #{} from {} files"
+                        .format(part_num, small_part_count))
+
+            small_parts = []
+            for p in part[1]:
+                small_parts.append(
+                    s3.get_object(Bucket=self.bucket,
+                                  Key=p[0]
+                                  )['Body'].read().decode('utf-8')
+                )
 
             if len(small_parts) > 0:
-                part_num += 1
                 last_part = ''.join(small_parts)
-                small_part_count = len(small_parts)
+
                 small_parts = None  # cleanup
                 resp = s3.upload_part(Bucket=self.bucket,
                                       Key=self.result_filepath,
                                       PartNumber=part_num,
                                       UploadId=self.upload_id,
                                       Body=last_part)
-                msg = "Setup local sub-part #{} from {} files"\
+                msg = "Finish sub-part #{} from {} files"\
                       .format(part_num, small_part_count)
                 if logger.getEffectiveLevel() == logging.DEBUG:
                     logger.debug("{}, got response: {}".format(msg, resp))
                 else:
                     logger.info(msg)
-                parts_mapping.append({'ETag': resp['ETag'][1:-1],
-                                      'PartNumber': part_num})
 
-            last_part = None  # cleanup
+                last_part = None
 
-        return parts_mapping
+                return {'ETag': resp['ETag'][1:-1],
+                        'PartNumber': part_num}
+            return {}
+
+        data_to_thread = []
+        for idx, data in enumerate(_chunk_by_size(local_parts,
+                                                  MIN_S3_SIZE * 2),
+                                   start=1):
+            data_to_thread.append([part_num + idx, data])
+
+        parts_mapping.extend(
+            _threads(self.small_parts_threads,
+                     data_to_thread,
+                     get_small_parts)
+        )
+
+        # Sort part mapping by part number
+        return sorted(parts_mapping, key=lambda i: i['PartNumber'])
 
     def _complete_concatenation(self, s3, parts_mapping):
         if len(parts_mapping) == 0:

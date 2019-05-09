@@ -1,6 +1,4 @@
 import logging
-from functools import partial
-from multiprocessing import Pool
 
 from .utils import _create_s3_client, _convert_to_bytes, _chunk_by_size
 from .multipart_upload_job import MultipartUploadJob
@@ -19,19 +17,16 @@ class S3Concat:
         self.all_files = []
         self.s3 = _create_s3_client()
 
-    def concat(self, parts_threads=1, small_parts_threads=1):
+    def concat(self, small_parts_threads=1):
 
         grouped_parts_list = _chunk_by_size(self.all_files, self.min_file_size)
         logger.info("Created {} concatenation groups"
                     .format(len(grouped_parts_list)))
 
-        pool = Pool(processes=parts_threads)
-        func = partial(MultipartUploadJob,
-                       self.bucket,
-                       self.key,
-                       small_parts_threads=small_parts_threads,
-                       content_type=self.content_type)
-        pool.map(func, grouped_parts_list)
+        for part_data in grouped_parts_list:
+            MultipartUploadJob(self.bucket, self.key, part_data,
+                               small_parts_threads=small_parts_threads,
+                               content_type=self.content_type)
 
     def add_files(self, prefix):
 
