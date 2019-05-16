@@ -18,15 +18,19 @@ S3 Concat is used to concatenate many small files in an s3 bucket into fewer lar
 
 ### Import
 ```python
+from s3_concat import S3Concat
+
 bucket = 'YOUR_BUCKET_NAME'
-out_path = 'FILE_TO_SAVE_TO'
+concatenated_file = 'FILE_TO_SAVE_TO.json'
 min_file_size = '50MB'
 path_to_concat = 'PATH_TO_FILES_TO_CONCAT'
 
 # Init the job
-job = S3Concat(bucket, out_path, min_file_size, content_type='application/json')
+job = S3Concat(bucket, concatenated_file, min_file_size, content_type='application/json')
 # Add files, can call multiple times to add files from other directories
 job.add_files(path_to_concat)
+# Add a single file at a time
+job.add_file('some/file_key.json')
 # Only use small_parts_threads if you need to. See Advanced Usage section below.
 job.concat(small_parts_threads=4)
 ```

@@ -46,3 +46,7 @@ class S3Concat:
             logger.info("Found {} objects so far".format(len(objects_list)))
 
         self.all_files.extend(objects_list)
+
+    def add_file(self, key):
+        resp = self.s3.get_object(Bucket=self.bucket, Key=key)
+        self.all_files.append((key, resp['ContentLength']))
