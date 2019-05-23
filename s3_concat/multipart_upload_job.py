@@ -27,13 +27,8 @@ class MultipartUploadJob:
 
         # s3 cannot be a class var because the Pool cannot pickle it
         s3 = _create_s3_client()
-        if len(self.parts_list) > 0:
-            self.upload_id = self._start_multipart_upload(s3)
-            parts_mapping = self._assemble_parts(s3)
-            self._complete_concatenation(s3, parts_mapping)
-
-        elif len(self.parts_list) == 1:
-            # can perform a simple S3 copy since there is just a single file
+        if len(self.parts_list) == 1:
+            # Perform a simple S3 copy since there is just a single file
             source_file = "{}/{}".format(self.bucket, self.parts_list[0][0])
             resp = s3.copy_object(Bucket=self.bucket,
                                   CopySource=source_file,
@@ -43,6 +38,11 @@ class MultipartUploadJob:
                 logger.debug("{}, got response: {}".format(msg, resp))
             else:
                 logger.info(msg)
+
+        elif len(self.parts_list) > 1:
+            self.upload_id = self._start_multipart_upload(s3)
+            parts_mapping = self._assemble_parts(s3)
+            self._complete_concatenation(s3, parts_mapping)
 
     def _start_multipart_upload(self, s3):
         resp = s3.create_multipart_upload(Bucket=self.bucket,
