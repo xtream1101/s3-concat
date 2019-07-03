@@ -25,9 +25,13 @@ class S3Concat:
 
         part_keys = []
         for part_data in grouped_parts_list:
-            upload_resp = MultipartUploadJob(self.bucket, self.key, part_data,
-                                             small_parts_threads=small_parts_threads,
-                                             content_type=self.content_type)
+            upload_resp = MultipartUploadJob(
+                self.bucket,
+                self.key,
+                part_data,
+                small_parts_threads=small_parts_threads,
+                content_type=self.content_type
+            )
             part_keys.append(upload_resp.result_filepath)
 
         return part_keys
