@@ -23,10 +23,14 @@ class S3Concat:
         logger.info("Created {} concatenation groups"
                     .format(len(grouped_parts_list)))
 
+        part_keys = []
         for part_data in grouped_parts_list:
-            MultipartUploadJob(self.bucket, self.key, part_data,
-                               small_parts_threads=small_parts_threads,
-                               content_type=self.content_type)
+            upload_resp = MultipartUploadJob(self.bucket, self.key, part_data,
+                                             small_parts_threads=small_parts_threads,
+                                             content_type=self.content_type)
+            part_keys.append(upload_resp.result_filepath)
+
+        return part_keys
 
     def add_files(self, prefix):
 
