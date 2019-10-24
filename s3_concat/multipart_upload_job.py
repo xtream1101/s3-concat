@@ -74,10 +74,7 @@ class MultipartUploadJob:
                                        CopySource=source_part)
             msg = "Setup S3 part #{}, with path: {}".format(part_num,
                                                             source_part)
-            if logger.getEffectiveLevel() == logging.DEBUG:
-                logger.debug("{}, got response: {}".format(msg, resp))
-            else:
-                logger.info(msg)
+            logger.debug("{}, got response: {}".format(msg, resp))
 
             parts_mapping.append({'ETag': resp['CopyPartResult']['ETag'][1:-1],
                                   'PartNumber': part_num})
@@ -92,8 +89,8 @@ class MultipartUploadJob:
             part_num, part = data
             small_part_count = len(part[1])
 
-            logger.info("Start sub-part #{} from {} files"
-                        .format(part_num, small_part_count))
+            logger.debug("Start sub-part #{} from {} files"
+                         .format(part_num, small_part_count))
 
             small_parts = []
             for p in part[1]:
@@ -114,10 +111,7 @@ class MultipartUploadJob:
                                       Body=last_part)
                 msg = "Finish sub-part #{} from {} files"\
                       .format(part_num, small_part_count)
-                if logger.getEffectiveLevel() == logging.DEBUG:
-                    logger.debug("{}, got response: {}".format(msg, resp))
-                else:
-                    logger.info(msg)
+                logger.debug("{}, got response: {}".format(msg, resp))
 
                 last_part = None
 
