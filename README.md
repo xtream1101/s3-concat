@@ -21,9 +21,12 @@ S3 Concat is used to concatenate many small files in an s3 bucket into fewer lar
 from s3_concat import S3Concat
 
 bucket = 'YOUR_BUCKET_NAME'
-concatenated_file = 'FILE_TO_SAVE_TO.json'
-min_file_size = '50MB'
 path_to_concat = 'PATH_TO_FILES_TO_CONCAT'
+concatenated_file = 'FILE_TO_SAVE_TO.json'
+# Setting this to a size will always add a part number at the end of the file name
+min_file_size = '50MB'  # ex: FILE_TO_SAVE_TO-1.json, FILE_TO_SAVE_TO-2.json, ...
+# Setting this to None will concat all files into a single file
+# min_file_size = None  ex: FILE_TO_SAVE_TO.json
 
 # Init the job
 job = S3Concat(bucket, concatenated_file, min_file_size, content_type='application/json')
