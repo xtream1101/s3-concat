@@ -30,7 +30,8 @@ class S3Concat:
                 self.key,
                 part_data,
                 small_parts_threads=small_parts_threads,
-                content_type=self.content_type
+                add_part_number=self.min_file_size is not None,
+                content_type=self.content_type,
             )
             part_keys.append(upload_resp.result_filepath)
 

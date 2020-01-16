@@ -71,7 +71,7 @@ def _chunk_by_size(file_list, min_file_size):
     for p in file_list:
         current_size += p[1]
         current_list.append(p)
-        if current_size > min_file_size:
+        if min_file_size is not None and current_size > min_file_size:
             grouped_list.append((current_index, current_list))
             current_list = []
             current_size = 0
@@ -96,6 +96,8 @@ def _convert_to_bytes(value):
     Raises:
         ValueError -- if the input value is not a valid type to convert
     """
+    if value is None:
+        return None
     value = value.strip()
     sizes = {'KB': 1024,
              'MB': 1024**2,
