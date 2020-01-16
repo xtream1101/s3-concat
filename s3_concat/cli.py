@@ -24,9 +24,10 @@ def cli():
                         required=True,
                         )
     parser.add_argument("--filesize",
-                        help=("Min filesize of the concatenated files"
+                        help=("Use to create multiple files if needed."
+                              " Min filesize of the concatenated files"
                               " in [B,KB,MB,GB,TB]. e.x. 5.2GB"),
-                        required=True,
+                        default=None,
                         )
     parser.add_argument("--small-parts-threads",
                         type=int,
