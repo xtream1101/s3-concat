@@ -8,6 +8,7 @@ class MultipartUploadJob:
 
     def __init__(self, bucket, result_filepath, data_input,
                  small_parts_threads=1,
+                 add_part_number=True,
                  content_type='application/octet-stream'):
         # threading support comming soon
         self.bucket = bucket
@@ -15,15 +16,18 @@ class MultipartUploadJob:
         self.content_type = content_type
         self.small_parts_threads = small_parts_threads
 
-        if '.' in result_filepath.split('/')[-1]:
-            # If there is a file extention, put the part number before it
-            path_parts = result_filepath.rsplit('.', 1)
-            self.result_filepath = '{}-{}.{}'.format(path_parts[0],
-                                                     self.part_number,
-                                                     path_parts[1])
+        if add_part_number:
+            if '.' in result_filepath.split('/')[-1]:
+                # If there is a file extention, put the part number before it
+                path_parts = result_filepath.rsplit('.', 1)
+                self.result_filepath = '{}-{}.{}'.format(path_parts[0],
+                                                         self.part_number,
+                                                         path_parts[1])
+            else:
+                self.result_filepath = '{}-{}'.format(result_filepath,
+                                                      self.part_number)
         else:
-            self.result_filepath = '{}-{}'.format(result_filepath,
-                                                  self.part_number)
+            self.result_filepath = result_filepath
 
         # s3 cannot be a class var because the Pool cannot pickle it
         s3 = _create_s3_client()
