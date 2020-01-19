@@ -49,8 +49,7 @@ def _threads(num_threads, data, callback, *args, **kwargs):
     return item_list
 
 
-def _create_s3_client():
-    session = boto3.session.Session()
+def _create_s3_client(session):
     return session.client('s3')
 
 
