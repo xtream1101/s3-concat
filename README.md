@@ -29,7 +29,10 @@ min_file_size = '50MB'  # ex: FILE_TO_SAVE_TO-1.json, FILE_TO_SAVE_TO-2.json, ..
 # min_file_size = None  ex: FILE_TO_SAVE_TO.json
 
 # Init the job
-job = S3Concat(bucket, concatenated_file, min_file_size, content_type='application/json')
+job = S3Concat(bucket, concatenated_file, min_file_size,
+               content_type='application/json',
+              #  session=boto3.session.Session(),  # For custom aws session
+               )
 # Add files, can call multiple times to add files from other directories
 job.add_files(path_to_concat)
 # Add a single file at a time
