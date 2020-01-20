@@ -1,5 +1,5 @@
 import logging
-from .utils import _create_s3_client, _threads, _chunk_by_size, MIN_S3_SIZE
+from .utils import _threads, _chunk_by_size, MIN_S3_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -7,9 +7,11 @@ logger = logging.getLogger(__name__)
 class MultipartUploadJob:
 
     def __init__(self, bucket, result_filepath, data_input,
+                 s3,
                  small_parts_threads=1,
                  add_part_number=True,
                  content_type='application/octet-stream'):
+        # s3 cannot be a class var because the Pool cannot pickle it
         # threading support comming soon
         self.bucket = bucket
         self.part_number, self.parts_list = data_input
@@ -29,8 +31,6 @@ class MultipartUploadJob:
         else:
             self.result_filepath = result_filepath
 
-        # s3 cannot be a class var because the Pool cannot pickle it
-        s3 = _create_s3_client()
         if len(self.parts_list) == 1:
             # Perform a simple S3 copy since there is just a single file
             source_file = "{}/{}".format(self.bucket, self.parts_list[0][0])
