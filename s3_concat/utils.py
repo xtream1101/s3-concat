@@ -1,5 +1,4 @@
 import re
-import boto3
 import queue
 import logging
 import threading
