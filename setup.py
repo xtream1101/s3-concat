@@ -1,5 +1,4 @@
 from setuptools import setup
-from _version import __version__
 
 
 with open('README.md', 'r') as f:
@@ -8,7 +7,7 @@ with open('README.md', 'r') as f:
 setup(
     name='s3-concat',
     packages=['s3_concat'],
-    version=__version__,
+    version='0.0.7',
     description='Concat files in s3',
     long_description=long_description,
     long_description_content_type='text/markdown',

@@ -35,6 +35,6 @@ tag:
     - master
   script:
     - *write_permission
-    - export VERSION=$(echo $(python -c "import _version as v; print(v.__version__)"))
+    - export VERSION=$(echo $(awk -F "'" '/version=/{print $2}' setup.py))
     - git tag -a $VERSION -m "Version created by gitlab-ci Build"
     - git push origin $VERSION

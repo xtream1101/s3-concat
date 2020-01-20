@@ -1,5 +1,5 @@
-import logging
 import boto3
+import logging
 
 from .utils import _create_s3_client, _convert_to_bytes, _chunk_by_size
 from .multipart_upload_job import MultipartUploadJob
