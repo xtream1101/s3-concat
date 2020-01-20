@@ -7,7 +7,7 @@ with open('README.md', 'r') as f:
 setup(
     name='s3-concat',
     packages=['s3_concat'],
-    version='0.0.7',
+    version='0.1.7',
     description='Concat files in s3',
     long_description=long_description,
     long_description_content_type='text/markdown',
