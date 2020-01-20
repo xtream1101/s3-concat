@@ -1,18 +1,17 @@
-from distutils.core import setup
+from setuptools import setup
+from s3_concat._version import __version__
 
-try:
-    import pypandoc
-    long_description = pypandoc.convert('README.md', 'rst', format='md')
-except (IOError, ImportError) as e:
-    print(str(e))
-    long_description = ''
+
+with open('README.md', 'r') as f:
+    long_description = f.read()
 
 setup(
     name='s3-concat',
     packages=['s3_concat'],
-    version='0.1.6',
+    version=__version__,
     description='Concat files in s3',
     long_description=long_description,
+    long_description_content_type='text/markdown',
     author='Eddy Hintze',
     author_email="eddy@hintze.co",
     url="https://github.com/xtream1101/s3-concat",
@@ -28,7 +27,8 @@ setup(
             's3-concat=s3_concat.cli:cli',
         ],
     },
-    install_requires=['boto3',
-                      ],
+    install_requires=[
+        'boto3',
+    ],
 
 )

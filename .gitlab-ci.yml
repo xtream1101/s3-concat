@@ -1,9 +1,10 @@
-image: python:3.5
+image: python:3
 
 stages:
   - test
   - release
-  - deploy_service
+  - package
+
 
 flake8:
   stage: test
@@ -11,12 +12,29 @@ flake8:
     - pip install tox
     - tox -e flake8
 
-release-package:
-  stage: release
+
+pypi-package:
+  stage: package
   only:
-    - master
+    - tags
   script:
     - pip install twine
     - rm -f dist/*
     - python setup.py sdist
     - twine upload -u ${PYPI_USER} -p ${PYPI_PASS} dist/*
+
+
+.write_permission: &write_permission |
+    git config --global user.email "gitlab-ci"; git config --global user.name "gitlab-ci"
+    url_host=`git remote get-url origin | sed -e "s/https:\/\/gitlab-ci-token:.*@//g"`
+    git remote set-url origin "https://gitlab-ci-token:${CI_TAG_UPLOAD_TOKEN}@${url_host}"
+
+tag:
+  stage: release
+  only:
+    - master
+  script:
+    - *write_permission
+    - export VERSION=$(echo $(python -c "import humblebundle_downloader._version as v; print(v.__version__)"))
+    - git tag -a $VERSION -m "Version created by gitlab-ci Build"
+    - git push origin $VERSION
