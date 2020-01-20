@@ -8,6 +8,8 @@ stages:
 
 flake8:
   stage: test
+  except:
+    - tags
   script:
     - pip install tox
     - tox -e flake8
