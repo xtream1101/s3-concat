@@ -60,5 +60,5 @@ class S3Concat:
         self.all_files.extend(objects_list)
 
     def add_file(self, key):
-        resp = self.s3.get_object(Bucket=self.bucket, Key=key)
+        resp = self.s3.head_object(Bucket=self.bucket, Key=key)
         self.all_files.append((key, resp['ContentLength']))
