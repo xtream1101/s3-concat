@@ -14,6 +14,13 @@ flake8:
     - pip install tox
     - tox -e flake8
 
+pytest:
+  stage: test
+  except:
+    - tags
+  script:
+    - pip install tox
+    - tox -e py37
 
 pypi-package:
   stage: package
