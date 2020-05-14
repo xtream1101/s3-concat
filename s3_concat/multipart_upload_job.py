@@ -98,11 +98,17 @@ class MultipartUploadJob:
 
             small_parts = []
             for p in part[1]:
-                small_parts.append(
-                    s3.get_object(Bucket=self.bucket,
-                                  Key=p[0]
-                                  )['Body'].read().decode('utf-8')
-                )
+                try:
+                    small_parts.append(
+                        s3.get_object(
+                            Bucket=self.bucket,
+                            Key=p[0]
+                        )['Body'].read().decode('utf-8')
+                    )
+                except Exception as e:
+                    logger.critical(
+                        f"{e}: When getting {p[0]} from the bucket {self.bucket}")  # noqa: E501
+                    raise
 
             if len(small_parts) > 0:
                 last_part = ''.join(small_parts)
