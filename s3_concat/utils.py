@@ -48,8 +48,10 @@ def _threads(num_threads, data, callback, *args, **kwargs):
     return item_list
 
 
-def _create_s3_client(session):
-    return session.client('s3')
+def _create_s3_client(session, s3_client_kwargs=None):
+    if s3_client_kwargs is None:
+        s3_client_kwargs = {}
+    return session.client('s3', **s3_client_kwargs)
 
 
 def _chunk_by_size(file_list, min_file_size):
