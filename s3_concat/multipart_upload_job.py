@@ -103,7 +103,7 @@ class MultipartUploadJob:
                         s3.get_object(
                             Bucket=self.bucket,
                             Key=p[0]
-                        )['Body'].read().decode('utf-8')
+                        )['Body'].read()
                     )
                 except Exception as e:
                     logger.critical(
@@ -111,7 +111,7 @@ class MultipartUploadJob:
                     raise
 
             if len(small_parts) > 0:
-                last_part = ''.join(small_parts)
+                last_part = b''.join(small_parts)
 
                 small_parts = None  # cleanup
                 resp = s3.upload_part(Bucket=self.bucket,
