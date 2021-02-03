@@ -80,8 +80,10 @@ class MultipartUploadJob:
                                                             source_part)
             logger.debug("{}, got response: {}".format(msg, resp))
 
-            parts_mapping.append({'ETag': resp['CopyPartResult']['ETag'][1:-1],
-                                  'PartNumber': part_num})
+            # ceph doesn't return quoted etags
+            etag = (resp['CopyPartResult']['ETag']
+                    .replace("'", "").replace("\"", ""))
+            parts_mapping.append({'ETag': etag, 'PartNumber': part_num})
 
         # assemble parts too small for direct S3 copy by downloading them,
         # combining them, and then reuploading them as the last part of the
@@ -124,8 +126,9 @@ class MultipartUploadJob:
                 logger.debug("{}, got response: {}".format(msg, resp))
 
                 last_part = None
-
-                return {'ETag': resp['ETag'][1:-1],
+                # Handles both quoted and unquoted etags
+                etag = resp['ETag'].replace("'", "").replace("\"", "")
+                return {'ETag': etag,
                         'PartNumber': part_num}
             return {}
 
