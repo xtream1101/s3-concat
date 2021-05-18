@@ -1,8 +1,6 @@
-import re
-import queue
+import concurrent.futures
 import logging
-import threading
-
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -14,38 +12,32 @@ TB = KB**4
 MIN_S3_SIZE = 5 * MB
 
 
-def _threads(num_threads, data, callback, *args, **kwargs):
-    q = queue.Queue()
-    item_list = []
+def _thread_run(item, callback):
+    for _ in range(3):
+        # re try 3 times before giving up
+        try:
+            response = callback(item)
+            return response
+        except:
+            logger.exception("Retry failed batch of: {}".format(item))
 
-    def _thread_run():
-        while True:
-            item = q.get()
-            for _ in range(3):
-                # re try 3 times before giving up
-                try:
-                    response = callback(item, *args, **kwargs)
-                except Exception:
-                    logger.exception("Retry failed batch of: {}".format(item))
-                else:
-                    item_list.append(response)
-                    break
 
-            q.task_done()
+def _threads(num_threads, data, callback):
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = (
+            executor.submit(_thread_run, d, callback)
+            for d in data
+        )
 
-    for i in range(num_threads):
-        t = threading.Thread(target=_thread_run)
-        t.daemon = True
-        t.start()
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if not result:
+                raise Exception("no response gotten from callback")
 
-    # Fill the Queue with the data to process
-    for item in data:
-        q.put(item)
+            results.append(result)
 
-    # Start processing the data
-    q.join()
-
-    return item_list
+    return results
 
 
 def _create_s3_client(session, s3_client_kwargs=None):
