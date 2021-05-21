@@ -12,13 +12,14 @@ class S3Concat:
     def __init__(self, bucket, key, min_file_size,
                  content_type='application/octet-stream',
                  session=boto3.session.Session(),
-                 s3_client_kwargs=None):
+                 s3_client_kwargs=None,
+                 s3_client=None):
         self.bucket = bucket
         self.key = key
         self.min_file_size = _convert_to_bytes(min_file_size)
         self.content_type = content_type
         self.all_files = []
-        self.s3 = _create_s3_client(session, s3_client_kwargs=s3_client_kwargs)
+        self.s3 = s3_client or _create_s3_client(session, s3_client_kwargs=s3_client_kwargs)
 
     def concat(self, small_parts_threads=1):
 
