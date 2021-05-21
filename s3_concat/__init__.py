@@ -19,7 +19,7 @@ class S3Concat:
         self.min_file_size = _convert_to_bytes(min_file_size)
         self.content_type = content_type
         self.all_files = []
-        self.s3 = s3_client or _create_s3_client(session, s3_client_kwargs=s3_client_kwargs)
+        self.s3 = s3_client or _create_s3_client(session, s3_client_kwargs=s3_client_kwargs)  # noqa: E501
 
     def concat(self, small_parts_threads=1):
 

@@ -18,13 +18,13 @@ def _thread_run(item, callback):
         try:
             response = callback(item)
             return response
-        except:
+        except Exception:
             logger.exception("Retry failed batch of: {}".format(item))
 
 
 def _threads(num_threads, data, callback):
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:  # noqa: E501
         futures = (
             executor.submit(_thread_run, d, callback)
             for d in data
