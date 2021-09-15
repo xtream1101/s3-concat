@@ -44,9 +44,48 @@ class MultipartUploadJob:
                 logger.info(msg)
 
         elif len(self.parts_list) > 1:
-            self.upload_id = self._start_multipart_upload(s3)
-            parts_mapping = self._assemble_parts(s3)
-            self._complete_concatenation(s3, parts_mapping)
+            # if the total size of all the files is less than 5 MB, do a regular put
+            # Multipart upload minimum is 5 MB
+            # https://docs.aws.amazon.com/AmazonS3/latest/dev/qfacts.html
+            current_size = 0
+            for p in self.parts_list:
+                current_size += p[1]
+
+            if current_size > MIN_S3_SIZE:
+                self.upload_id = self._start_multipart_upload(s3)
+                parts_mapping = self._assemble_parts(s3)
+                self._complete_concatenation(s3, parts_mapping)
+            else:
+                self._concat_small_files(s3)
+
+    def _concat_small_files(self, s3):
+        logger.info("Inside _concat_small_files")
+        small_parts = []
+        for part in self.parts_list:
+            try:
+                small_parts.append(
+                    s3.get_object(
+                        Bucket=self.bucket,
+                        Key=part[0]
+                    )['Body'].read()
+                )
+            except Exception as e:
+                logger.critical(
+                    f"{e}: When getting {part[0]} from the bucket {self.bucket}")  # noqa: E501
+                raise
+
+        if len(small_parts) > 0:
+            last_part = b''.join(small_parts)
+            resp = s3.put_object(Bucket=self.bucket,
+                                    Key=self.result_filepath,
+                                    ContentType=self.content_type,
+                                    Body=last_part)
+            msg = "Put object {}".format(self.result_filepath)
+            if logger.getEffectiveLevel() == logging.DEBUG:
+                logger.debug("{}, got response: {}".format(msg, resp))
+            else:
+                logger.info(msg)
+            small_parts = None  # cleanup
 
     def _start_multipart_upload(self, s3):
         resp = s3.create_multipart_upload(Bucket=self.bucket,
