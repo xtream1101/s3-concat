@@ -29,6 +29,11 @@ def cli():
                               " in [B,KB,MB,GB,TB]. e.x. 5.2GB"),
                         default=None,
                         )
+    parser.add_argument("--main-threads",
+                        type=int,
+                        help=("[Advanced Usage] Number of threads to"
+                              " use for the s3 uploading. (Default: 1)"),
+                        default=1)
     parser.add_argument("--small-parts-threads",
                         type=int,
                         help=("[Advanced Usage] Number of threads to"
@@ -38,4 +43,4 @@ def cli():
 
     job = S3Concat(args.bucket, args.output, args.filesize)
     job.add_files(args.folder)
-    job.concat(small_parts_threads=args.small_parts_threads)
+    job.concat(small_parts_threads=args.small_parts_threads, main_threads=args.main_threads)
