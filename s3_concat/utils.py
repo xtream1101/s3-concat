@@ -62,7 +62,8 @@ def _chunk_by_size(file_list, min_file_size):
     current_index = 1
     for p in file_list:
         if min_file_size is not None:
-            # If the current file is already larger then the min file size, just add it to the list on its own
+            # If the current file is already larger then the min file size,
+            # just add it to the list on its own
             if p[1] > min_file_size:
                 grouped_list.append((current_index, [p]))
                 current_index += 1

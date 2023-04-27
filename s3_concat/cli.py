@@ -43,4 +43,7 @@ def cli():
 
     job = S3Concat(args.bucket, args.output, args.filesize)
     job.add_files(args.folder)
-    job.concat(small_parts_threads=args.small_parts_threads, main_threads=args.main_threads)
+    job.concat(
+        small_parts_threads=args.small_parts_threads,
+        main_threads=args.main_threads
+    )
