@@ -31,7 +31,6 @@ class MultipartUploadJob:
         else:
             self.result_filepath = result_filepath
 
-        print(len(self.parts_list))
         if len(self.parts_list) == 1:
             # Perform a simple S3 copy since there is just a single file
             source_file = "{}/{}".format(self.bucket, self.parts_list[0][0])

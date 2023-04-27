@@ -90,7 +90,9 @@ def test_concat_gzip_content():
     assert content_output == b'file 1 contents\nfile 2 contents\n'
 
 @pytest.mark.parametrize("test_input,expected", [
+    # Large file first
     ([('fileB.json', 327172108), ('fileA.json', 22581358), ('fileC.json', 22581000)], [(1, [('fileB.json', 327172108)]), (2, [('fileA.json', 22581358), ('fileC.json', 22581000)])]),
+    # Small file first
     ([('fileA.json', 22581358), ('fileB.json', 327172108), ('fileC.json', 22581000)], [(1, [('fileB.json', 327172108)]), (2, [('fileA.json', 22581358), ('fileC.json', 22581000)])]),
 ])
 def test_combine_logic(test_input, expected):
