@@ -1,5 +1,10 @@
 # Change log
 
+### 0.2.4
+- Any file that is larger then the min_file_size will not get combined with a smaller file anymore
+    - Issue was if a small file was to small, and the next file was larger then the min size it would still combine them
+- Added threads for the main upload loop via the `main_threads` argument. This way even the large files will be uploaded using threads
+
 ### 0.2.3
 - Fixed memory leak as noted in [issue #11](https://github.com/xtream1101/s3-concat/issues/11)
 

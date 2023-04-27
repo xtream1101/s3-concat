@@ -7,12 +7,11 @@ with open('README.md', 'r') as f:
 setup(
     name='s3-concat',
     packages=['s3_concat'],
-    version='0.2.3',
+    version='0.2.4',
     description='Concat files in s3',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='Eddy Hintze',
-    author_email="eddy@hintze.co",
     url="https://github.com/xtream1101/s3-concat",
     license='MIT',
     classifiers=[

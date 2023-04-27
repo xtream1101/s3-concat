@@ -1,4 +1,5 @@
 import boto3
+import pytest
 from s3_concat import S3Concat
 from moto import mock_s3
 
@@ -87,3 +88,20 @@ def test_concat_gzip_content():
         content_output = f.read()
 
     assert content_output == b'file 1 contents\nfile 2 contents\n'
+
+
+@pytest.mark.parametrize("test_input,expected", [
+    # Large file first
+    (
+        [('fileB.json', 327172108), ('fileA.json', 22581358), ('fileC.json', 22581000)],  # noqa: E501
+        [(1, [('fileB.json', 327172108)]), (2, [('fileA.json', 22581358), ('fileC.json', 22581000)])]),  # noqa: E501
+    # Small file first
+    (
+        [('fileA.json', 22581358), ('fileB.json', 327172108), ('fileC.json', 22581000)],  # noqa: E501
+        [(1, [('fileB.json', 327172108)]), (2, [('fileA.json', 22581358), ('fileC.json', 22581000)])]),  # noqa: E501
+])
+def test_combine_logic(test_input, expected):
+    from s3_concat.utils import _chunk_by_size
+
+    min_file_size = 250 * 1024 * 1024  # 250MB
+    assert _chunk_by_size(test_input, min_file_size) == expected

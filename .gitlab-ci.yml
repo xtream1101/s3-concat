@@ -1,9 +1,9 @@
-image: python:3
+image: python:3.8
 
 stages:
   - test
+  - tag
   - release
-  - package
 
 
 flake8:
@@ -20,18 +20,7 @@ pytest:
     - tags
   script:
     - pip install tox
-    - tox -e py37
-
-pypi-package:
-  stage: package
-  only:
-    - tags
-  script:
-    - pip install twine
-    - rm -f dist/*
-    - python setup.py sdist
-    - twine upload -u ${PYPI_USER} -p ${PYPI_PASS} dist/*
-
+    - tox -e py38
 
 .write_permission: &write_permission |
     git config --global user.email "gitlab-ci"; git config --global user.name "gitlab-ci"
@@ -39,7 +28,7 @@ pypi-package:
     git remote set-url origin "https://gitlab-ci-token:${CI_TAG_UPLOAD_TOKEN}@${url_host}"
 
 tag:
-  stage: release
+  stage: tag
   only:
     - master
   script:
@@ -47,3 +36,13 @@ tag:
     - export VERSION=$(echo $(awk -F "'" '/version=/{print $2}' setup.py))
     - git tag -a $VERSION -m "Version created by gitlab-ci Build"
     - git push origin $VERSION
+
+pypi-package:
+  stage: release
+  only:
+    - tags
+  script:
+    - pip install twine
+    - rm -f dist/*  # Clear any old/cached builds
+    - python setup.py sdist bdist_wheel
+    - python -m twine upload dist/*
