@@ -1,6 +1,6 @@
 # Change log
 
-### WIP
+### 0.3.0
 
 - Updated to use pyproject.toml and uv
 - Added "source_bucket" argument.

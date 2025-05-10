@@ -39,6 +39,14 @@ def cli():
         default=None,
     )
     parser.add_argument(
+        "--source-bucket",
+        help=(
+            "[Advanced Usage] Source bucket to use."
+            " If not specified, the base bucket will be used."
+        ),
+        default=None,
+    )
+    parser.add_argument(
         "--main-threads",
         type=int,
         help=(
@@ -58,7 +66,9 @@ def cli():
     )
     args = parser.parse_args()
 
-    job = S3Concat(args.bucket, args.output, args.filesize)
+    job = S3Concat(
+        args.bucket, args.output, args.filesize, source_bucket=args.source_bucket
+    )
     job.add_files(args.folder)
     job.concat(
         small_parts_threads=args.small_parts_threads, main_threads=args.main_threads
