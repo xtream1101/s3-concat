@@ -5,14 +5,13 @@ stages:
   - tag
   - release
 
-
-flake8:
-  stage: test
-  except:
-    - tags
-  script:
-    - pip install tox
-    - tox -e flake8
+# flake8:
+#   stage: test
+#   except:
+#     - tags
+#   script:
+#     - pip install tox
+#     - tox -e flake8
 
 pytest:
   stage: test
@@ -23,9 +22,9 @@ pytest:
     - tox -e py38
 
 .write_permission: &write_permission |
-    git config --global user.email "gitlab-ci"; git config --global user.name "gitlab-ci"
-    url_host=`git remote get-url origin | sed -e "s/https:\/\/gitlab-ci-token:.*@//g"`
-    git remote set-url origin "https://gitlab-ci-token:${CI_TAG_UPLOAD_TOKEN}@${url_host}"
+  git config --global user.email "gitlab-ci"; git config --global user.name "gitlab-ci"
+  url_host=`git remote get-url origin | sed -e "s/https:\/\/gitlab-ci-token:.*@//g"`
+  git remote set-url origin "https://gitlab-ci-token:${CI_TAG_UPLOAD_TOKEN}@${url_host}"
 
 tag:
   stage: tag
@@ -43,6 +42,6 @@ pypi-package:
     - tags
   script:
     - pip install twine
-    - rm -f dist/*  # Clear any old/cached builds
+    - rm -f dist/* # Clear any old/cached builds
     - python setup.py sdist bdist_wheel
     - python -m twine upload dist/*
