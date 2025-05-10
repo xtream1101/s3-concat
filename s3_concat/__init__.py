@@ -15,11 +15,13 @@ class S3Concat:
         key,
         min_file_size,
         content_type="application/octet-stream",
+        source_bucket=None,
         session=boto3.session.Session(),
         s3_client_kwargs=None,
         s3_client=None,
     ):
-        self.bucket = bucket
+        self.target_bucket = bucket
+        self.source_bucket = source_bucket or bucket
         self.key = key
         self.min_file_size = _convert_to_bytes(min_file_size)
         self.content_type = content_type
@@ -34,10 +36,11 @@ class S3Concat:
 
         def process_uploads(part_data):
             upload_resp = MultipartUploadJob(
-                self.bucket,
+                self.target_bucket,
                 self.key,
                 part_data,
                 self.s3,
+                source_bucket=self.source_bucket,
                 small_parts_threads=small_parts_threads,
                 add_part_number=self.min_file_size is not None,
                 content_type=self.content_type,
@@ -52,13 +55,13 @@ class S3Concat:
             return [(x["Key"], x["Size"]) for x in resp["Contents"]]
 
         objects_list = []
-        resp = self.s3.list_objects(Bucket=self.bucket, Prefix=prefix)
+        resp = self.s3.list_objects(Bucket=self.source_bucket, Prefix=prefix)
         objects_list.extend(resp_to_filelist(resp))
         logger.info("Found {} objects so far".format(len(objects_list)))
         while resp["IsTruncated"]:
             last_key = objects_list[-1][0]
             resp = self.s3.list_objects(
-                Bucket=self.bucket, Prefix=prefix, Marker=last_key
+                Bucket=self.source_bucket, Prefix=prefix, Marker=last_key
             )
             objects_list.extend(resp_to_filelist(resp))
             logger.info("Found {} objects so far".format(len(objects_list)))
@@ -66,5 +69,5 @@ class S3Concat:
         self.all_files.extend(objects_list)
 
     def add_file(self, key):
-        resp = self.s3.head_object(Bucket=self.bucket, Key=key)
+        resp = self.s3.head_object(Bucket=self.source_bucket, Key=key)
         self.all_files.append((key, resp["ContentLength"]))

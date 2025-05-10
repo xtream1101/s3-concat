@@ -12,13 +12,15 @@ class MultipartUploadJob:
         result_filepath,
         data_input,
         s3,
+        source_bucket=None,
         small_parts_threads=1,
         add_part_number=True,
         content_type="application/octet-stream",
     ):
         # s3 cannot be a class var because the Pool cannot pickle it
         # threading support comming soon
-        self.bucket = bucket
+        self.target_bucket = bucket
+        self.source_bucket = source_bucket or bucket
         self.part_number, self.parts_list = data_input
         self.content_type = content_type
         self.small_parts_threads = small_parts_threads
@@ -37,9 +39,9 @@ class MultipartUploadJob:
 
         if len(self.parts_list) == 1:
             # Perform a simple S3 copy since there is just a single file
-            source_file = "{}/{}".format(self.bucket, self.parts_list[0][0])
+            source = {"Bucket": self.source_bucket, "Key": self.parts_list[0][0]}
             resp = s3.copy_object(
-                Bucket=self.bucket, CopySource=source_file, Key=self.result_filepath
+                Bucket=self.target_bucket, CopySource=source, Key=self.result_filepath
             )
             msg = "Copied single file to {}".format(self.result_filepath)
             if logger.getEffectiveLevel() == logging.DEBUG:
@@ -54,7 +56,9 @@ class MultipartUploadJob:
 
     def _start_multipart_upload(self, s3):
         resp = s3.create_multipart_upload(
-            Bucket=self.bucket, Key=self.result_filepath, ContentType=self.content_type
+            Bucket=self.target_bucket,
+            Key=self.result_filepath,
+            ContentType=self.content_type,
         )
         msg = "Started multipart upload for {}".format(self.result_filepath)
         if logger.getEffectiveLevel() == logging.DEBUG:
@@ -69,7 +73,7 @@ class MultipartUploadJob:
         part_num = 0
 
         s3_parts = [
-            "{}/{}".format(self.bucket, p[0])
+            {"Bucket": self.source_bucket, "Key": p[0]}
             for p in self.parts_list
             if p[1] > MIN_S3_SIZE
         ]
@@ -79,7 +83,7 @@ class MultipartUploadJob:
         # assemble parts large enough for direct S3 copy
         for part_num, source_part in enumerate(s3_parts, 1):
             resp = s3.upload_part_copy(
-                Bucket=self.bucket,
+                Bucket=self.target_bucket,
                 Key=self.result_filepath,
                 PartNumber=part_num,
                 UploadId=self.upload_id,
@@ -110,11 +114,13 @@ class MultipartUploadJob:
             for p in part[1]:
                 try:
                     small_parts.append(
-                        s3.get_object(Bucket=self.bucket, Key=p[0])["Body"].read()
+                        s3.get_object(Bucket=self.source_bucket, Key=p[0])[
+                            "Body"
+                        ].read()
                     )
                 except Exception as e:
                     logger.critical(
-                        f"{e}: When getting {p[0]} from the bucket {self.bucket}"
+                        f"{e}: When getting {p[0]} from the bucket {self.source_bucket}"
                     )  # noqa: E501
                     raise
 
@@ -123,7 +129,7 @@ class MultipartUploadJob:
 
                 small_parts = None  # cleanup
                 resp = s3.upload_part(
-                    Bucket=self.bucket,
+                    Bucket=self.target_bucket,
                     Key=self.result_filepath,
                     PartNumber=part_num,
                     UploadId=self.upload_id,
@@ -156,7 +162,9 @@ class MultipartUploadJob:
     def _complete_concatenation(self, s3, parts_mapping):
         if len(parts_mapping) == 0:
             s3.abort_multipart_upload(
-                Bucket=self.bucket, Key=self.result_filepath, UploadId=self.upload_id
+                Bucket=self.target_bucket,
+                Key=self.result_filepath,
+                UploadId=self.upload_id,
             )
             warn_msg = (
                 "Aborted concatenation for file {}, with upload"
@@ -166,7 +174,7 @@ class MultipartUploadJob:
         else:
             parts = {"Parts": parts_mapping}
             s3.complete_multipart_upload(
-                Bucket=self.bucket,
+                Bucket=self.target_bucket,
                 Key=self.result_filepath,
                 UploadId=self.upload_id,
                 MultipartUpload=parts,

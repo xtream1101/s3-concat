@@ -34,21 +34,21 @@ def test_concat_text_file():
     s3.create_bucket(Bucket="my-bucket")
     s3.put_object(
         Bucket="my-bucket",
-        Key="some_folder/thing1.json",
+        Key="some_folder/thing1.txt",
         Body=b"Thing1\n",
     )
     s3.put_object(
         Bucket="my-bucket",
-        Key="some_folder/thing2.json",
+        Key="some_folder/thing2.txt",
         Body=b"Thing2\n",
     )
 
-    concat = S3Concat("my-bucket", "all_things.json", None, session=session)
+    concat = S3Concat("my-bucket", "all_things.txt", None, session=session)
     concat.add_files("some_folder")
     concat.concat()
 
     concat_output = (
-        s3.get_object(Bucket="my-bucket", Key="all_things.json")["Body"]
+        s3.get_object(Bucket="my-bucket", Key="all_things.txt")["Body"]
         .read()
         .decode("utf-8")
     )
@@ -127,3 +127,40 @@ def test_combine_logic(test_input, expected):
 
     min_file_size = 250 * 1024 * 1024  # 250MB
     assert _chunk_by_size(test_input, min_file_size) == expected
+
+
+@mock_aws
+def test_different_buckets():
+    session = boto3.session.Session()
+    s3 = session.client("s3")
+    # Need to create the bucket since this is in Moto's 'virtual' AWS account
+    s3.create_bucket(Bucket="output-bucket")
+    s3.create_bucket(Bucket="input-bucket")
+    s3.put_object(
+        Bucket="input-bucket",
+        Key="some_folder/thing1.txt",
+        Body=b"Thing1\n",
+    )
+    s3.put_object(
+        Bucket="input-bucket",
+        Key="some_folder/thing2.txt",
+        Body=b"Thing2\n",
+    )
+
+    concat = S3Concat(
+        "output-bucket",
+        "all_things.txt",
+        "10MB",
+        source_bucket="input-bucket",
+        session=session,
+    )
+    concat.add_files("some_folder")
+    concat.concat()
+
+    concat_output = (
+        s3.get_object(Bucket="output-bucket", Key="all_things-1.txt")["Body"]
+        .read()
+        .decode("utf-8")
+    )
+
+    assert concat_output == "Thing1\nThing2\n"
