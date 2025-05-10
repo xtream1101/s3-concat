@@ -25,10 +25,7 @@ def _thread_run(item, callback):
 def _threads(num_threads, data, callback):
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:  # noqa: E501
-        futures = (
-            executor.submit(_thread_run, d, callback)
-            for d in data
-        )
+        futures = (executor.submit(_thread_run, d, callback) for d in data)
 
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
@@ -43,7 +40,7 @@ def _threads(num_threads, data, callback):
 def _create_s3_client(session, s3_client_kwargs=None):
     if s3_client_kwargs is None:
         s3_client_kwargs = {}
-    return session.client('s3', **s3_client_kwargs)
+    return session.client("s3", **s3_client_kwargs)
 
 
 def _chunk_by_size(file_list, min_file_size):
@@ -101,16 +98,17 @@ def _convert_to_bytes(value):
     if value is None:
         return None
     value = value.strip()
-    sizes = {'KB': 1024,
-             'MB': 1024**2,
-             'GB': 1024**3,
-             'TB': 1024**4,
-             }
+    sizes = {
+        "KB": 1024,
+        "MB": 1024**2,
+        "GB": 1024**3,
+        "TB": 1024**4,
+    }
     if value[-2:].upper() in sizes:
         return float(value[:-2].strip()) * sizes[value[-2:].upper()]
-    elif re.match(r'^\d+(\.\d+)?$', value):
+    elif re.match(r"^\d+(\.\d+)?$", value):
         return float(value)
-    elif re.match(r'^\d+(\.\d+)?\s?B$', value):
+    elif re.match(r"^\d+(\.\d+)?\s?B$", value):
         return float(value[:-1])
     else:
         raise ValueError("Value {} is not a valid size".format(value))
