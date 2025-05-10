@@ -1,6 +1,6 @@
 import boto3
 import pytest
-from moto import mock_s3
+from moto import mock_aws
 
 from s3_concat import S3Concat
 
@@ -8,7 +8,7 @@ from s3_concat import S3Concat
 ###
 # add_file
 ###
-@mock_s3
+@mock_aws
 def test_add_file():
     session = boto3.session.Session()
     s3 = session.client("s3")
@@ -26,7 +26,7 @@ def test_add_file():
     assert concat.all_files == [("some_folder/thing1.json", 29)]
 
 
-@mock_s3
+@mock_aws
 def test_concat_text_file():
     session = boto3.session.Session()
     s3 = session.client("s3")
@@ -56,7 +56,7 @@ def test_concat_text_file():
     assert concat_output == "Thing1\nThing2\n"
 
 
-@mock_s3
+@mock_aws
 def test_concat_gzip_content():
     """Create 2 gzip files, then use s3concat to create a single gzip file
     To test, un-compress and read contents of the concat'd file
