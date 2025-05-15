@@ -1,0 +1,70 @@
+on:
+  push:
+
+jobs:
+  ruff-format:
+    runs-on: debian-tools
+    steps:
+      - name: Checkout code
+        uses: Public-Mirrors/actions_checkout@v4
+
+      - name: Run Ruff Format
+        run: uvx ruff format --check --diff
+
+  ruff-isort:
+    runs-on: debian-tools
+    steps:
+      - name: Checkout code
+        uses: Public-Mirrors/actions_checkout@v4
+
+      - name: Run Ruff Isort
+        run: uvx ruff check --extend-select I --diff
+
+  test:
+    runs-on: debian-tools
+    steps:
+      - name: Checkout code
+        uses: Public-Mirrors/actions_checkout@v4
+
+      - name: Install dependencies
+        run: uv sync
+      - name: Run tests
+        run: uv run pytest --tb=short --disable-warnings
+
+  tag:
+    runs-on: debian-tools
+    needs:
+      - ruff-format
+      - ruff-isort
+      - test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: Public-Mirrors/actions_checkout@v4
+
+      - name: Create tag
+        run: |
+          git config --global user.email "forgejo-ci@gitx.codes"
+          git config --global user.name "forgejo-ci"
+          # Get the version value from pyproject.toml
+          version=$(grep -oP '(?<=^version = ")[^"]*' pyproject.toml)
+          echo "Version: $version"
+          # Create a tag with the version value
+          git tag "v${version}" -m "Release v${version}"
+          git push origin --tags
+
+  release:
+    runs-on: debian-tools
+    needs:
+      - tag
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: Public-Mirrors/actions_checkout@v4
+
+      - name: Get version value
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
+        run: |
+          uv build
+          uv publish
