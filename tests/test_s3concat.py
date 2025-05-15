@@ -57,6 +57,38 @@ def test_concat_text_file():
 
 
 @mock_aws
+def test_concat_text_file_with_delimeter():
+    session = boto3.session.Session()
+    s3 = session.client("s3")
+    # Need to create the bucket since this is in Moto's 'virtual' AWS account
+    s3.create_bucket(Bucket="my-bucket")
+    s3.put_object(
+        Bucket="my-bucket",
+        Key="some_folder/thing1.txt",
+        Body=b"Thing1\n",
+    )
+    s3.put_object(
+        Bucket="my-bucket",
+        Key="some_folder/thing2.txt",
+        Body=b"Thing2\n",
+    )
+
+    concat = S3Concat(
+        "my-bucket", "all_things.txt", None, session=session, delimiter="--"
+    )
+    concat.add_files("some_folder")
+    concat.concat()
+
+    concat_output = (
+        s3.get_object(Bucket="my-bucket", Key="all_things.txt")["Body"]
+        .read()
+        .decode("utf-8")
+    )
+
+    assert concat_output == "Thing1\n--Thing2\n"
+
+
+@mock_aws
 def test_concat_gzip_content():
     """Create 2 gzip files, then use s3concat to create a single gzip file
     To test, un-compress and read contents of the concat'd file

@@ -34,6 +34,7 @@ job = S3Concat(bucket, concatenated_file, min_file_size,
               #  source_bucket="SOURCE_BUCKET_NAME",  # For copying files from another bucket
               #  session=boto3.session.Session(),  # For custom aws session
               #  s3_client_kwargs={}  # Use to pass arguments allowed by the s3 client: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html
+              # delimiter="\n",  # Will insert this delimiter between each file when concatenating. Warning, this will need to download all files no matter the size to add this delimiter
                )
 # Add files, can call multiple times to add files from other directories
 job.add_files(path_to_concat)

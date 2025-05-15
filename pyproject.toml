@@ -1,6 +1,6 @@
 [project]
 name = "s3-concat"
-version = "0.2.4"
+version = "0.3.0"
 description = "Concat files in s3"
 authors = [
     { name = "Eddy Hintze", email = "eddy@gitx.codes"}

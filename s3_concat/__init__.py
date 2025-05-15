@@ -46,6 +46,7 @@ class S3Concat:
                 small_parts_threads=small_parts_threads,
                 add_part_number=self.min_file_size is not None,
                 content_type=self.content_type,
+                delimiter=self.delimiter,
             )
             return upload_resp.result_filepath
 

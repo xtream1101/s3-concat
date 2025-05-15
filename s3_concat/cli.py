@@ -47,6 +47,11 @@ def cli():
         default=None,
     )
     parser.add_argument(
+        "--delimiter",
+        help=("Delimiter to insert between each file. (Default: None)"),
+        default=None,
+    )
+    parser.add_argument(
         "--main-threads",
         type=int,
         help=(
@@ -67,7 +72,11 @@ def cli():
     args = parser.parse_args()
 
     job = S3Concat(
-        args.bucket, args.output, args.filesize, source_bucket=args.source_bucket
+        args.bucket,
+        args.output,
+        args.filesize,
+        source_bucket=args.source_bucket,
+        delimiter=args.delimiter,
     )
     job.add_files(args.folder)
     job.concat(

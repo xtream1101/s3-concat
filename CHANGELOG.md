@@ -2,8 +2,9 @@
 
 ### 0.3.0
 
+- Added `source_bucket` argument to copy files from another bucket. [issue #20](https://github.com/xtream1101/s3-concat/issues/20)
+- Added `delimiter` argument to add a delimiter between files when concatenating. This will need to download all files no matter the size to add this delimiter. [issue #18](https://github.com/xtream1101/s3-concat/issues/18)
 - Updated to use pyproject.toml and uv
-- Added "source_bucket" argument.
 - Formatted code using ruff
 
 ### 0.2.4

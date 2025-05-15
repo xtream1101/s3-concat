@@ -16,6 +16,7 @@ class MultipartUploadJob:
         small_parts_threads=1,
         add_part_number=True,
         content_type="application/octet-stream",
+        delimiter=None,
     ):
         # s3 cannot be a class var because the Pool cannot pickle it
         # threading support comming soon
@@ -24,6 +25,7 @@ class MultipartUploadJob:
         self.part_number, self.parts_list = data_input
         self.content_type = content_type
         self.small_parts_threads = small_parts_threads
+        self.delimiter = delimiter
 
         if add_part_number:
             if "." in result_filepath.split("/")[-1]:
@@ -72,15 +74,24 @@ class MultipartUploadJob:
         parts_mapping = []
         part_num = 0
 
-        s3_parts = [
-            {"Bucket": self.source_bucket, "Key": p[0]}
-            for p in self.parts_list
-            if p[1] > MIN_S3_SIZE
-        ]
+        # If delimiter is provided, we need to download all parts to insert delimiters
+        if self.delimiter is not None:
+            # Treat all parts as local_parts if delimiter is provided
+            local_parts = self.parts_list
+            s3_parts = []
+            logger.info(
+                "Delimiter provided, downloading all parts to add delimiter between them"
+            )
+        else:
+            # Normal behavior without delimiter - direct S3 copy for large files
+            s3_parts = [
+                {"Bucket": self.source_bucket, "Key": p[0]}
+                for p in self.parts_list
+                if p[1] > MIN_S3_SIZE
+            ]
+            local_parts = [p for p in self.parts_list if p[1] <= MIN_S3_SIZE]
 
-        local_parts = [p for p in self.parts_list if p[1] <= MIN_S3_SIZE]
-
-        # assemble parts large enough for direct S3 copy
+        # assemble parts large enough for direct S3 copy (only if no delimiter)
         for part_num, source_part in enumerate(s3_parts, 1):
             resp = s3.upload_part_copy(
                 Bucket=self.target_bucket,
@@ -125,7 +136,12 @@ class MultipartUploadJob:
                     raise
 
             if len(small_parts) > 0:
-                last_part = b"".join(small_parts)
+                # If delimiter is provided, join parts with delimiter in between
+                if self.delimiter is not None:
+                    delimiter_bytes = self.delimiter.encode("utf-8")
+                    last_part = delimiter_bytes.join(small_parts)
+                else:
+                    last_part = b"".join(small_parts)
 
                 small_parts = None  # cleanup
                 resp = s3.upload_part(
