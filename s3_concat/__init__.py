@@ -19,6 +19,7 @@ class S3Concat:
         session=boto3.session.Session(),
         s3_client_kwargs=None,
         s3_client=None,
+        delimiter=None,
     ):
         self.target_bucket = bucket
         self.source_bucket = source_bucket or bucket
@@ -28,7 +29,8 @@ class S3Concat:
         self.all_files = []
         self.s3 = s3_client or _create_s3_client(
             session, s3_client_kwargs=s3_client_kwargs
-        )  # noqa: E501
+        )
+        self.delimiter = delimiter
 
     def concat(self, small_parts_threads=1, main_threads=1):
         grouped_parts_list = _chunk_by_size(self.all_files, self.min_file_size)

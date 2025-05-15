@@ -4,7 +4,7 @@
 
 - Updated to use pyproject.toml and uv
 - Added "source_bucket" argument.
-- Code formatting
+- Formatted code using ruff
 
 ### 0.2.4
 
